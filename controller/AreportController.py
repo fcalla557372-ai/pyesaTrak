@@ -1,6 +1,6 @@
 # AreportController.py - Updated with Analytics loading
-from AreportModel import ReportsModel
-from AreportsView import ReportDetailDialog
+from model.AreportModel import ReportsModel
+from view.AreportsView import ReportDetailDialog
 from PyQt6.QtWidgets import QMessageBox, QFileDialog
 from datetime import datetime
 

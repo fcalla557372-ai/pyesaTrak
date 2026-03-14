@@ -873,3 +873,4 @@ class ProductDetailDialog(QWidget):
         btn_row.addStretch()
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
+        layout.addLayout(btn_row)

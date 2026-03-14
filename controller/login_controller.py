@@ -42,13 +42,13 @@ class LoginController:
             print(f"Opening dashboard for: {username} (Role: {user_role})")
 
             if user_role == "Admin":
-                from ADBoardController import DashboardController
+                from controller.ADBoardController import DashboardController
                 self.dashboard_controller = DashboardController(self.current_user)
                 self.dashboard_controller.show()
 
             elif user_role == "Staff":
                 # Staff goes straight to inventory — no dashboard
-                from SIController import StaffMainWindow
+                from controller.SIController import StaffMainWindow
                 self.staff_window = StaffMainWindow(self.current_user)
                 self.staff_window.show()
 

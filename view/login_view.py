@@ -164,7 +164,7 @@ class LoginView(QWidget):
             QMessageBox {
                 background-color: #fffff;
                 color: #000000;
-                
+
             }
             QMessageBox QLabel {
                 color: #000000;

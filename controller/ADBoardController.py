@@ -1,13 +1,13 @@
 # Filename: ADBoardController.py
-from ADBModel import DashboardModel
+from model.ADBModel import DashboardModel
 from PyQt6.QtWidgets import (QMessageBox, QDialog, QVBoxLayout, QHBoxLayout,
                               QLabel, QPushButton, QFrame, QWidget)
 from PyQt6.QtCore import Qt
 
-from ManageUsersController import ManageUsersController
-from Ainventory_Cont import ProductDetailsController
-from AreportController import ReportsController
-from AreportsView import ReportsView
+from controller.ManageUsersController import ManageUsersController
+from controller.Ainventory_Cont import ProductDetailsController
+from controller.AreportController import ReportsController
+from view.AreportsView import ReportsView
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ class DashboardController:
     PAGE_REPORTS     = 3
 
     def __init__(self, user_data=None):
-        from ADBoardView import DashboardView
+        from view.ADBoardView import DashboardView
 
         self.model     = DashboardModel()
         self.view      = DashboardView()
@@ -263,9 +263,9 @@ class DashboardController:
         dialog = CustomMessageBox(self.view)
         if dialog.exec():
             try:
-                from login_controller import LoginController
-                from login_view import LoginView
-                from login_model import LoginModel
+                from controller.login_controller import LoginController
+                from view.login_view import LoginView
+                from model.login_model import LoginModel
 
                 # Open login first, then close dashboard
                 self.lc = LoginController(LoginView(), LoginModel())

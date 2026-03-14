@@ -9,8 +9,8 @@ Responsibilities:
 - User feedback (QMessageBox)
 - NO database queries, NO UI widget creation
 """
-from Ainventory_model import ProductDetailsModel
-from Ainventory_view import ProductDetailsView, AddProductDialog, ProductDetailDialog
+from model.Ainventory_model import ProductDetailsModel
+from view.Ainventory_view import ProductDetailsView, AddProductDialog, ProductDetailDialog
 from PyQt6.QtWidgets import QMessageBox
 from typing import Optional
 

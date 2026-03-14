@@ -1,10 +1,18 @@
 # Filename: Main.py
 import sys
+import os
+
+# ── Make subfolders discoverable so flat imports still work ───────────────────
+_base = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(_base, 'controller'))
+sys.path.insert(0, os.path.join(_base, 'model'))
+sys.path.insert(0, os.path.join(_base, 'view'))
+
 from PyQt6.QtWidgets import QApplication
 
-from login_model import LoginModel
-from login_view import LoginView
-from login_controller import LoginController
+from model.login_model import LoginModel
+from view.login_view import LoginView
+from controller.login_controller import LoginController
 
 
 def main():
