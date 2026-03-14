@@ -8,7 +8,7 @@ class LoginController:
         self.view = view
         self.current_user = None
         self.dashboard_controller = None
-        self.staff_dashboard_controller = None
+        self.staff_window = None
 
         self.view.login_attempted.connect(self.handle_login)
 
@@ -22,10 +22,8 @@ class LoginController:
             self.model.user_data = user_data
             self.view.clear_inputs()
 
-            # [CRITICAL FIX] Open Dashboard FIRST
+            # Open the appropriate window FIRST, then close login
             self.open_dashboard()
-
-            # THEN Close Login Window
             self.view.close()
         else:
             print(f"✗ Login failed: {message}")
@@ -40,7 +38,7 @@ class LoginController:
     def open_dashboard(self):
         try:
             user_role = self.current_user['role']
-            username = self.current_user['username']
+            username  = self.current_user['username']
             print(f"Opening dashboard for: {username} (Role: {user_role})")
 
             if user_role == "Admin":
@@ -49,19 +47,28 @@ class LoginController:
                 self.dashboard_controller.show()
 
             elif user_role == "Staff":
-                from SDBoardController import StaffDashboardController
-                self.staff_dashboard_controller = StaffDashboardController(self.current_user)
-                self.staff_dashboard_controller.show()
+                # Staff goes straight to inventory — no dashboard
+                from SIController import StaffMainWindow
+                self.staff_window = StaffMainWindow(self.current_user)
+                self.staff_window.show()
 
             else:
-                self.show_message("Access Denied", f"No dashboard available for role: {user_role}", is_success=False)
+                self.show_message(
+                    "Access Denied",
+                    f"No interface available for role: {user_role}",
+                    is_success=False
+                )
                 self.view.show()
 
         except Exception as e:
-            print(f"\n✗ ERROR opening dashboard: {e}")
+            print(f"\n✗ ERROR opening window: {e}")
             import traceback
             traceback.print_exc()
-            self.show_message("Error", f"Failed to open dashboard.\n\nError: {str(e)}", is_success=False)
+            self.show_message(
+                "Error",
+                f"Failed to open application.\n\nError: {str(e)}",
+                is_success=False
+            )
             self.view.show()
 
     def show_message(self, title, message, is_success=False):

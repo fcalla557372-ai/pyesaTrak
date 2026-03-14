@@ -1,10 +1,10 @@
-# SIModel.py
+# SIModel.py — Staff Inventory Model
 import mysql.connector
 from mysql.connector import Error
 
 
 class InventoryModel:
-    """Model specifically for Staff operations (No Add Product)"""
+    """Model for Staff inventory operations (read + stock transactions, no add product)."""
 
     def __init__(self):
         self.connection = None
@@ -27,33 +27,81 @@ class InventoryModel:
         return self.get_products_by_filter("1=1")
 
     def get_products_by_filter(self, where_clause):
+        """Fetch products matching a WHERE clause. Uses real category column."""
         self.connect()
         try:
             cursor = self.connection.cursor(dictionary=True)
-            query = f"SELECT product_id, product_name, brand, model, stock_quantity, status FROM inventory WHERE {where_clause} ORDER BY product_id ASC"
+            query = (
+                f"SELECT product_id, product_name, brand, model, "
+                f"stock_quantity, status, "
+                f"COALESCE(category, 'Other') AS category "
+                f"FROM inventory WHERE {where_clause} ORDER BY product_id ASC"
+            )
             cursor.execute(query)
             return cursor.fetchall()
-        except Error:
+        except Error as e:
+            print(f"Error fetching products: {e}")
+            return []
+        finally:
+            if self.connection:
+                self.connection.close()
+
+    def get_unique_brands(self) -> list:
+        """Return sorted list of distinct brands in inventory."""
+        self.connect()
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT DISTINCT brand FROM inventory "
+                "WHERE brand IS NOT NULL AND brand != '' ORDER BY brand ASC")
+            return [row[0] for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Error fetching brands: {e}")
             return []
         finally:
             if self.connection: self.connection.close()
 
-    # --- NEW METHOD FOR DEFECTIVE KPI ---
+    def get_unique_categories(self) -> list:
+        """Return sorted list of distinct categories in inventory."""
+        self.connect()
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT DISTINCT COALESCE(category, 'Other') AS category "
+                "FROM inventory WHERE category IS NOT NULL AND category != '' "
+                "ORDER BY category ASC")
+            return [row[0] for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Error fetching categories: {e}")
+            return []
+        finally:
+            if self.connection: self.connection.close()
+
     def get_defective_products_with_reason(self):
         """
-        Fetches products that have been reported as defective,
-        joining with the transaction log to get the specific REASON (remarks).
+        Fetches defect records from defective_items table.
+        Each row = one unique defect report (defect_id, not product_id).
         """
         self.connect()
         try:
             cursor = self.connection.cursor(dictionary=True)
             query = """
-                SELECT i.product_id, i.product_name, i.brand, i.model, 
-                       i.stock_quantity, i.status, t.remarks as defect_reason
-                FROM inventory i
-                JOIN stock_transactions t ON i.product_id = t.product_id
-                WHERE t.transaction_type = 'DEFECT'
-                ORDER BY t.transaction_date DESC
+                SELECT
+                    d.defect_id,
+                    i.product_id,
+                    i.product_name,
+                    i.brand,
+                    i.model,
+                    d.defective_qty,
+                    CONCAT(d.defect_type,
+                        CASE WHEN d.description IS NOT NULL AND d.description != ''
+                             THEN CONCAT(' - ', d.description)
+                             ELSE '' END
+                    ) AS defect_reason,
+                    DATE_FORMAT(d.reported_at, '%Y-%m-%d %H:%i') AS reported_at
+                FROM defective_items d
+                JOIN inventory i ON d.product_id = i.product_id
+                ORDER BY d.reported_at DESC
             """
             cursor.execute(query)
             return cursor.fetchall()
@@ -61,59 +109,59 @@ class InventoryModel:
             print(f"Error fetching defective products: {e}")
             return []
         finally:
-            if self.connection: self.connection.close()
+            if self.connection:
+                self.connection.close()
 
-    def update_stock(self, product_id, quantity_change, transaction_type, remarks, user_id):
+    def update_stock(self, product_id, quantity_change, transaction_type,
+                     remarks, user_id, defect_type=None, defect_description=None):
+        """
+        Atomically updates stock, logs a transaction, and (for DEFECT)
+        inserts a defective_items record.
+        """
         self.connect()
         try:
             cursor = self.connection.cursor()
             self.connection.start_transaction()
 
-            # 0. Get product name for activity log
-            cursor.execute("SELECT product_name FROM inventory WHERE product_id = %s", (product_id,))
-            result = cursor.fetchone()
-            product_name = result[0] if result else f"Product #{product_id}"
-
-            update_query = """
-                UPDATE inventory 
+            # 1. Update inventory
+            cursor.execute("""
+                UPDATE inventory
                 SET stock_quantity = stock_quantity + %s,
-                    status = CASE 
-                        WHEN (stock_quantity + %s) <= 0 THEN 'Out of Stock'
+                    status = CASE
+                        WHEN (stock_quantity + %s) <= 0  THEN 'Out of Stock'
                         WHEN (stock_quantity + %s) <= 10 THEN 'Low Stock'
                         ELSE 'Available'
                     END,
                     updated_at = NOW()
                 WHERE product_id = %s
-            """
-            cursor.execute(update_query, (quantity_change, quantity_change, quantity_change, product_id))
+            """, (quantity_change, quantity_change, quantity_change, product_id))
 
-            log_query = """
-                INSERT INTO stock_transactions 
-                (product_id, transaction_type, quantity, remarks, performed_by, transaction_date)
+            # 2. Log transaction
+            cursor.execute("""
+                INSERT INTO stock_transactions
+                    (product_id, transaction_type, quantity, remarks,
+                     performed_by, transaction_date)
                 VALUES (%s, %s, %s, %s, %s, NOW())
-            """
-            cursor.execute(log_query, (product_id, transaction_type, abs(quantity_change), remarks, user_id))
+            """, (product_id, transaction_type, abs(quantity_change), remarks, user_id))
 
-            # Log Activity
-            activity_desc = ""
-            if transaction_type == 'IN':
-                activity_desc = f"Stock IN: {abs(quantity_change)} units of '{product_name}'"
-            elif transaction_type == 'OUT':
-                activity_desc = f"Stock OUT: {abs(quantity_change)} units of '{product_name}'"
-            elif transaction_type == 'DEFECT':
-                activity_desc = f"Reported DEFECT: {abs(quantity_change)} units of '{product_name}'"
-
-            if activity_desc:
-                activity_query = """
-                    INSERT INTO activity_log (user_id, activity_description, activity_time)
-                    VALUES (%s, %s, NOW())
-                """
-                cursor.execute(activity_query, (user_id, activity_desc))
+            # 3. If DEFECT — also insert into defective_items
+            if transaction_type == 'DEFECT':
+                d_type = defect_type or (remarks.split(' - ')[0] if ' - ' in remarks else remarks)
+                d_desc = defect_description or (
+                    remarks.split(' - ', 1)[1] if ' - ' in remarks else '')
+                cursor.execute("""
+                    INSERT INTO defective_items
+                        (product_id, defective_qty, defect_type,
+                         description, reported_by, reported_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                """, (product_id, abs(quantity_change), d_type, d_desc, user_id))
 
             self.connection.commit()
             return True
-        except Error:
+        except Error as e:
+            print(f"Error updating stock: {e}")
             self.connection.rollback()
             return False
         finally:
-            if self.connection: self.connection.close()
+            if self.connection:
+                self.connection.close()

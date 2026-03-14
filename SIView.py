@@ -1,10 +1,20 @@
-# SIView.py
+# SIView.py — Staff Inventory View (No dashboard dependency)
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QPushButton, QTableWidget, QTableWidgetItem,
-                             QHeaderView, QFrame, QDialog, QComboBox,
-                             QSpinBox, QLineEdit, QTextEdit)
+                              QPushButton, QTableWidget, QTableWidgetItem,
+                              QHeaderView, QAbstractItemView, QFrame, QDialog,
+                              QComboBox, QSpinBox, QLineEdit, QTextEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
+
+PRIMARY = '#0076aa'
+WHITE   = '#ffffff'
+TEXT    = '#1a1a1a'
+SUBTEXT = '#757575'
+DANGER  = '#D32F2F'
+WARNING = '#F57C00'
+SUCCESS = '#388E3C'
+BORDER  = '#E0E0E0'
+BG      = '#f4f6f8'
 
 
 class ToggleTableWidget(QTableWidget):
@@ -20,13 +30,119 @@ class ToggleTableWidget(QTableWidget):
 
 
 class InventoryView(QWidget):
-    stock_in_clicked = pyqtSignal()
-    stock_out_clicked = pyqtSignal()
-    defect_clicked = pyqtSignal()
+    stock_in_clicked        = pyqtSignal()
+    stock_out_clicked       = pyqtSignal()
+    defect_clicked          = pyqtSignal()
+    filter_all_clicked      = pyqtSignal()
+    filter_low_stock_clicked    = pyqtSignal()
+    filter_out_of_stock_clicked = pyqtSignal()
+    filter_defective_clicked    = pyqtSignal()
+    product_selected        = pyqtSignal(int)   # emits product_id on row click
 
     def __init__(self, color_scheme=None):
         super().__init__()
+        self._active_filter   = "All"
+        self._active_category = ""
+        self._active_brand    = ""
+        self._all_products    = []
+        self._all_defects     = []
+        self._current_mode    = "normal"
         self.init_ui()
+
+    # ── Brand / Category handlers ─────────────────────────────────────────────
+    def _on_brand_changed(self, text: str):
+        self._active_brand = text if (text and text != "All Brands") else ""
+        self._apply_local_filters()
+
+    def _on_category_changed(self, text: str):
+        self._active_category = text if (text and text != "All Categories") else ""
+        self._active_brand = ""
+
+        # Repopulate brand dropdown to only brands in selected category
+        self.brand_combo.blockSignals(True)
+        self.brand_combo.clear()
+        self.brand_combo.addItem("All Brands")
+        if self._active_category:
+            brands = sorted({p.get("brand", "") for p in self._all_products
+                             if p.get("category") == self._active_category
+                             and p.get("brand")})
+        else:
+            brands = sorted({p.get("brand", "") for p in self._all_products
+                             if p.get("brand")})
+        for b in brands:
+            self.brand_combo.addItem(b)
+        self.brand_combo.blockSignals(False)
+
+        self._apply_local_filters()
+
+    def _apply_local_filters(self):
+        """Apply active category + brand + search text to the cached product list."""
+        pool = self._all_products
+        if self._active_category:
+            pool = [p for p in pool if p.get("category") == self._active_category]
+        if self._active_brand:
+            pool = [p for p in pool if p.get("brand") == self._active_brand]
+        q = self.search_input.text().strip().lower()
+        if q:
+            pool = [p for p in pool
+                    if q in p.get("product_name", "").lower()
+                    or q in p.get("brand", "").lower()
+                    or q in p.get("model", "").lower()]
+        self._render_products(pool)
+
+    def populate_brand_filter(self, brands: list):
+        self.brand_combo.blockSignals(True)
+        self.brand_combo.clear()
+        self.brand_combo.addItem("All Brands")
+        for b in brands:
+            self.brand_combo.addItem(b)
+        self.brand_combo.blockSignals(False)
+
+    def populate_category_filter(self, categories: list):
+        self.category_combo.blockSignals(True)
+        self.category_combo.clear()
+        self.category_combo.addItem("All Categories")
+        for c in categories:
+            self.category_combo.addItem(c)
+        self.category_combo.blockSignals(False)
+
+    # ── Filter dropdown helper ────────────────────────────────────────────────
+    _FILTER_OPTIONS = [
+        ("All Items",    "All"),
+        ("Low Stock",    "Low"),
+        ("Out of Stock", "Out"),
+        ("Defective",    "Defect"),
+    ]
+
+    def _on_filter_changed(self, index):
+        """Called when the filter dropdown selection changes."""
+        key = self._FILTER_OPTIONS[index][1]
+        self._active_filter = key
+        self.search_input.blockSignals(True)
+        self.search_input.clear()
+        self.search_input.blockSignals(False)
+        sig = {
+            "All":    self.filter_all_clicked,
+            "Low":    self.filter_low_stock_clicked,
+            "Out":    self.filter_out_of_stock_clicked,
+            "Defect": self.filter_defective_clicked,
+        }
+        sig[key].emit()
+
+    def set_active_tab(self, tab_key):
+        """Controller calls this to sync the dropdown after a programmatic filter."""
+        idx_map = {"All": 0, "Low": 1, "Out": 2, "Defect": 3}
+        self._active_filter = tab_key
+        self.filter_combo.blockSignals(True)
+        self.filter_combo.setCurrentIndex(idx_map.get(tab_key, 0))
+        self.filter_combo.blockSignals(False)
+
+    # ── UI build ──────────────────────────────────────────────────────────────
+    def _lbl(self, text, style):
+        """Create a styled QLabel inline."""
+        l = QLabel(text)
+        l.setStyleSheet(style)
+        return l
 
     def init_ui(self):
         self.setWindowTitle("PyesaTrak - Staff Inventory")
@@ -34,329 +150,559 @@ class InventoryView(QWidget):
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-
-        bg = QFrame()
-        bg.setStyleSheet("background-color: #E8E8E8; border-radius: 15px;")
-        bg_layout = QVBoxLayout(bg)
-        bg_layout.setContentsMargins(50, 50, 50, 50)
+        main_layout.setSpacing(0)
 
         card = QFrame()
-        card.setStyleSheet("background-color: #FFFFFF; border-radius: 15px;")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(30, 30, 30, 30)
-        card_layout.setSpacing(20)
+        card.setStyleSheet(
+            f"QFrame {{ background-color: {WHITE}; border-radius: 10px; border: none; }}")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(20, 16, 20, 16)
+        cl.setSpacing(10)
 
-        lbl = QLabel("Product Details")
-        lbl.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        lbl.setStyleSheet("color: black; border: none;")
-        card_layout.addWidget(lbl)
+        # Title
+        title = QLabel("Inventory (Staff)")
+        title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        title.setStyleSheet(f"color: {TEXT}; border: none;")
+        cl.addWidget(title)
 
-        btn_layout = QHBoxLayout()
-        self.btn_in = QPushButton("[+] STOCK IN")
-        self.btn_out = QPushButton("[-] STOCK OUT")
-        self.btn_def = QPushButton("[!] REPORT DEFECT")
+        # ── Row 1: Search + Filter + Brand + Category ────────────────────────
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(8)
 
-        base_style = "QPushButton { color: white; font-weight: bold; border-radius: 8px; padding: 10px; font-family: Arial; }"
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔍  Search")
+        self.search_input.setFixedHeight(34)
+        self.search_input.setMaximumWidth(220)
+        self.search_input.setStyleSheet(f"""
+            QLineEdit {{
+                border: 1px solid {BORDER}; border-radius: 17px;
+                padding: 4px 14px; color: {TEXT}; background: {WHITE};
+                font-size: 13px;
+            }}
+            QLineEdit:focus {{ border-color: {PRIMARY}; }}
+        """)
+        self.search_input.textChanged.connect(self._on_search)
+        filter_row.addWidget(self.search_input)
+
+        _combo_style = f"""
+            QComboBox {{
+                border: 1px solid {BORDER}; border-radius: 6px;
+                padding: 4px 10px; color: {TEXT}; background: {WHITE};
+                font-size: 13px;
+            }}
+            QComboBox:focus {{ border-color: {PRIMARY}; }}
+            QComboBox QAbstractItemView {{
+                background: {WHITE}; color: {TEXT};
+                selection-background-color: #d0eaf8;
+                border: 1px solid {BORDER};
+            }}
+        """
+        _lbl_style = f"color: {TEXT}; font-weight: bold; font-size: 13px; border: none;"
+
+        filter_row.addWidget(self._lbl("Filter", _lbl_style))
+        filter_row.addWidget(self._lbl("▼", f"color: {PRIMARY}; font-size: 13px; border: none;"))
+
+        self.filter_combo = QComboBox()
+        for label, _ in self._FILTER_OPTIONS:
+            self.filter_combo.addItem(label)
+        self.filter_combo.setFixedHeight(34)
+        self.filter_combo.setFixedWidth(150)
+        self.filter_combo.setStyleSheet(_combo_style)
+        self.filter_combo.currentIndexChanged.connect(self._on_filter_changed)
+        filter_row.addWidget(self.filter_combo)
+
+        filter_row.addWidget(self._lbl("Brand:", _lbl_style))
+        self.brand_combo = QComboBox()
+        self.brand_combo.addItem("All Brands")
+        self.brand_combo.setFixedHeight(34)
+        self.brand_combo.setFixedWidth(140)
+        self.brand_combo.setStyleSheet(_combo_style)
+        self.brand_combo.currentTextChanged.connect(self._on_brand_changed)
+        filter_row.addWidget(self.brand_combo)
+
+        filter_row.addWidget(self._lbl("Category:", _lbl_style))
+        self.category_combo = QComboBox()
+        self.category_combo.addItem("All Categories")
+        self.category_combo.setFixedHeight(34)
+        self.category_combo.setFixedWidth(160)
+        self.category_combo.setStyleSheet(_combo_style)
+        self.category_combo.currentTextChanged.connect(self._on_category_changed)
+        filter_row.addWidget(self.category_combo)
+
+        filter_row.addStretch()
+        cl.addLayout(filter_row)
+
+        # ── Row 2: Action buttons ────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        self.btn_in  = QPushButton("[+] Stock In")
+        self.btn_out = QPushButton("[-] Stock Out")
+        self.btn_def = QPushButton("[!] Report Defect")
+
         self.btn_in.setStyleSheet(
-            base_style + "QPushButton { background-color: #2E7D32; } QPushButton:hover { background-color: #1B5E20; }")
+            f"QPushButton {{ background-color: {SUCCESS}; color: white; font-weight: bold;"
+            " border-radius: 8px; padding: 8px 20px; font-size: 13px; border: none; }"
+            " QPushButton:hover { background-color: #1B5E20; }")
         self.btn_out.setStyleSheet(
-            base_style + "QPushButton { background-color: #0076aa; } QPushButton:hover { background-color: #005580; }")
+            f"QPushButton {{ background-color: {PRIMARY}; color: white; font-weight: bold;"
+            " border-radius: 8px; padding: 8px 20px; font-size: 13px; border: none; }"
+            " QPushButton:hover { background-color: #005580; }")
         self.btn_def.setStyleSheet(
-            base_style + "QPushButton { background-color: #D32F2F; } QPushButton:hover { background-color: #A52020; }")
+            f"QPushButton {{ background-color: {DANGER}; color: white; font-weight: bold;"
+            " border-radius: 8px; padding: 8px 20px; font-size: 13px; border: none; }"
+            " QPushButton:hover { background-color: #A52020; }")
 
         for btn in [self.btn_in, self.btn_out, self.btn_def]:
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumWidth(140)
-            btn_layout.addWidget(btn)
+            btn.setFixedHeight(38)
+            btn_row.addWidget(btn)
 
-        btn_layout.addStretch()
-        card_layout.addLayout(btn_layout)
+        btn_row.addStretch()
 
         self.btn_in.clicked.connect(self.stock_in_clicked.emit)
         self.btn_out.clicked.connect(self.stock_out_clicked.emit)
         self.btn_def.clicked.connect(self.defect_clicked.emit)
+        cl.addLayout(btn_row)
 
+        # ── Table ─────────────────────────────────────────────────────────────
         self.product_table = ToggleTableWidget()
-        self.product_table.setColumnCount(6)
-        self.product_table.setHorizontalHeaderLabels(
-            ["Product ID", "Product Name", "Brand", "Model", "Stock", "Status"])
-        self.product_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.product_table.verticalHeader().setVisible(False)
-        self.product_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.product_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.product_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self.product_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection)
+        self.product_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers)
         self.product_table.setShowGrid(False)
-        self.product_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-
-        self.product_table.cellDoubleClicked.connect(self.handle_cell_double_click)
-
-        self.product_table.setStyleSheet("""
-            QTableWidget { background-color: transparent; border: none; color: black; font-family: Arial; font-size: 13px; outline: 0; }
-            QHeaderView::section { background-color: #000000; color: white; padding: 12px; font-weight: bold; border: none; font-family: Arial; }
-            QTableWidget::item { padding: 10px; border-bottom: 1px solid #F0F0F0; outline: none; border: none; }
-            QTableWidget::item:selected { background-color: #B3D9FF; color: black; border: none; outline: none; }
-            QTableWidget::item:focus { border: none; outline: none; }
+        self.product_table.setFrameShape(QFrame.Shape.NoFrame)
+        # NoFocus would block the :selected visual state — use StrongFocus instead
+        self.product_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.product_table.setAlternatingRowColors(True)
+        self.product_table.cellClicked.connect(self._on_row_clicked)
+        self.product_table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {WHITE}; border: none; color: {TEXT};
+                font-size: 13px; outline: 0;
+            }}
+            QHeaderView::section {{
+                background-color: {TEXT}; color: white;
+                padding: 10px 8px; font-weight: bold; border: none; font-size: 12px;
+            }}
+            QTableWidget::item {{
+                padding: 9px 8px; border-bottom: 1px solid #f0f0f0;
+            }}
+            QTableWidget::item:selected {{
+                background-color: #d0eaf8; color: {TEXT};
+            }}
+            QTableWidget::item:alternate {{
+                background-color: #fafafa;
+            }}
+            QTableWidget::item:alternate:selected {{
+                background-color: #d0eaf8; color: {TEXT};
+            }}
         """)
+        cl.addWidget(self.product_table)
+        main_layout.addWidget(card)
 
-        card_layout.addWidget(self.product_table)
-        bg_layout.addWidget(card)
-        main_layout.addWidget(bg)
+    # ── Row selection ─────────────────────────────────────────────────────────
+    def _on_row_clicked(self, row, col):
+        """Emit the product_id of the clicked row (normal mode only)."""
+        if self._current_mode == "defect":
+            return  # defect rows don't map to a stock-actionable product_id
+        item = self.product_table.item(row, 0)
+        if item:
+            try:
+                self.product_selected.emit(int(item.text()))
+            except ValueError:
+                pass
 
-    def handle_cell_double_click(self, row, column):
-        self.product_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+    def get_selected_product_id(self):
+        """Returns the product_id of the currently selected row, or None."""
+        r = self.product_table.currentRow()
+        if r >= 0 and self._current_mode == "normal":
+            item = self.product_table.item(r, 0)
+            if item:
+                try:
+                    return int(item.text())
+                except ValueError:
+                    pass
+        return None
 
+    # ── Search ────────────────────────────────────────────────────────────────
+    def _on_search(self, text: str):
+        q = text.strip().lower()
+        if self._current_mode == "defect":
+            pool = self._all_defects if not q else [
+                p for p in self._all_defects
+                if q in p.get("product_name", "").lower()
+                or q in p.get("brand", "").lower()
+                or q in p.get("defect_reason", "").lower()
+            ]
+            self._render_defective(pool)
+        else:
+            # Respect active category + brand alongside text search
+            pool = self._all_products
+            if self._active_category:
+                pool = [p for p in pool if p.get("category") == self._active_category]
+            if self._active_brand:
+                pool = [p for p in pool if p.get("brand") == self._active_brand]
+            if q:
+                pool = [p for p in pool
+                        if q in p.get("product_name", "").lower()
+                        or q in p.get("brand", "").lower()
+                        or q in p.get("model", "").lower()]
+            self._render_products(pool)
+
+    # ── Data display ──────────────────────────────────────────────────────────
     def load_table(self, products):
-        self.product_table.setColumnCount(6)
-        self.product_table.setHorizontalHeaderLabels(
-            ["Product ID", "Product Name", "Brand", "Model", "Stock", "Status"])
-        self.product_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        """Called by controller — replaces full product cache and re-applies filters."""
+        self._current_mode = "normal"
+        self._all_products = list(products)
+        # Re-apply any active category/brand/search so view stays consistent
+        pool = self._all_products
+        if self._active_category:
+            pool = [p for p in pool if p.get("category") == self._active_category]
+        if self._active_brand:
+            pool = [p for p in pool if p.get("brand") == self._active_brand]
+        q = self.search_input.text().strip().lower()
+        if q:
+            pool = [p for p in pool
+                    if q in p.get("product_name", "").lower()
+                    or q in p.get("brand", "").lower()
+                    or q in p.get("model", "").lower()]
+        self._render_products(pool)
 
+    def _render_products(self, products):
+        cols = ["Product ID", "Product Name", "Brand", "Model", "Stock", "Status"]
+        self.product_table.setColumnCount(len(cols))
+        self.product_table.setHorizontalHeaderLabels(cols)
+        self.product_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
         self.product_table.setRowCount(len(products))
+
         for row, p in enumerate(products):
-            self._fill_common_rows(row, p)
-            status = p['status']
-            status_item = self.make_item(status, True)
-            if status == 'Available':
-                status_item.setForeground(QColor("#2E7D32"))
-            elif status == 'Low Stock':
-                status_item.setForeground(QColor("#FF9800"))
-            elif status == 'Out of Stock':
-                status_item.setForeground(QColor("#D32F2F"))
-            self.product_table.setItem(row, 5, status_item)
+            self.product_table.setRowHeight(row, 42)
+            self.product_table.setItem(row, 0, self._item(str(p['product_id']), center=True))
+            self.product_table.setItem(row, 1, self._item(p['product_name']))
+            self.product_table.setItem(row, 2, self._item(p.get('brand', '')))
+            self.product_table.setItem(row, 3, self._item(p.get('model', '')))
+
+            try:
+                qty = int(p['stock_quantity'] or 0)
+            except (ValueError, TypeError):
+                qty = 0
+            qty_item = self._item(str(qty), center=True)
+            if qty <= 10:
+                qty_item.setForeground(QColor(DANGER))
+                qty_item.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+            self.product_table.setItem(row, 4, qty_item)
+
+            if qty == 0:
+                status, color = "Out of Stock", DANGER
+            elif qty <= 10:
+                status, color = "Low Stock", WARNING
+            else:
+                status, color = "Available", SUCCESS
+            st_item = self._item(status, center=True)
+            st_item.setForeground(QColor(color))
+            self.product_table.setItem(row, 5, st_item)
 
     def load_defective_table(self, products):
-        """Loads defective items view with REASON column (7 columns)"""
-        self.product_table.setColumnCount(7)
-        self.product_table.setHorizontalHeaderLabels(
-            ["Product ID", "Product Name", "Brand", "Model", "Stock", "Status", "Defect Reason"])
-        self.product_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.product_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        """Called by controller for defective view."""
+        self._current_mode = "defect"
+        self._all_defects = list(products)
+        self._render_defective(products)
 
+    def _render_defective(self, products):
+        cols = ["Defective ID", "Product Name", "Brand", "Model",
+                "Defective Qty", "Defect Reason"]
+        self.product_table.setColumnCount(len(cols))
+        self.product_table.setHorizontalHeaderLabels(cols)
+        hh = self.product_table.horizontalHeader()
+        hh.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         self.product_table.setRowCount(len(products))
+
         for row, p in enumerate(products):
-            self._fill_common_rows(row, p)
-            status_item = self.make_item(p['status'], True)
-            self.product_table.setItem(row, 5, status_item)
+            self.product_table.setRowHeight(row, 42)
+            self.product_table.setItem(row, 0, self._item(str(p['defect_id']), center=True))
+            self.product_table.setItem(row, 1, self._item(p['product_name']))
+            self.product_table.setItem(row, 2, self._item(p.get('brand', '')))
+            self.product_table.setItem(row, 3, self._item(p.get('model', '')))
 
-            reason_item = self.make_item(p.get('defect_reason', 'N/A'))
-            reason_item.setForeground(QColor("#D32F2F"))
-            self.product_table.setItem(row, 6, reason_item)
+            qty_item = self._item(str(p['defective_qty']), center=True)
+            qty_item.setForeground(QColor(DANGER))
+            qty_item.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+            self.product_table.setItem(row, 4, qty_item)
 
-    def _fill_common_rows(self, row, p):
-        self.product_table.setItem(row, 0, self.make_item(str(p['product_id']), True))
-        self.product_table.setItem(row, 1, self.make_item(p['product_name']))
-        self.product_table.setItem(row, 2, self.make_item(p.get('brand', '')))
-        self.product_table.setItem(row, 3, self.make_item(p.get('model', '')))
-        stock_qty = int(p['stock_quantity'])
-        stock_item = self.make_item(str(stock_qty), True)
-        if stock_qty <= 10:
-            stock_item.setForeground(QColor("#D32F2F"))
-            stock_item.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        self.product_table.setItem(row, 4, stock_item)
+            reason_item = self._item(p.get('defect_reason', 'N/A'))
+            reason_item.setForeground(QColor(DANGER))
+            self.product_table.setItem(row, 5, reason_item)
 
-    def make_item(self, text, center=False):
-        item = QTableWidgetItem(text)
-        if center: item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+    def _item(self, text: str, center: bool = False) -> QTableWidgetItem:
+        item = QTableWidgetItem(str(text))
+        if center:
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         return item
+
+    # Keep old method name for compatibility
+    def make_item(self, text, center=False):
+        return self._item(text, center)
 
     def get_selected_product(self):
         r = self.product_table.currentRow()
         if r >= 0:
             return {
-                'product_id': int(self.product_table.item(r, 0).text()),
-                'product_name': self.product_table.item(r, 1).text(),
-                'brand': self.product_table.item(r, 2).text(),
-                'model': self.product_table.item(r, 3).text(),
+                'product_id':    int(self.product_table.item(r, 0).text()),
+                'product_name':  self.product_table.item(r, 1).text(),
+                'brand':         self.product_table.item(r, 2).text(),
+                'model':         self.product_table.item(r, 3).text(),
                 'stock_quantity': int(self.product_table.item(r, 4).text())
             }
         return None
 
 
-# --- MISSING DIALOG CLASSES ADDED BELOW ---
+# ── TRANSACTION DIALOGS ───────────────────────────────────────────────────────
+# These use QDialog.exec() which is safe for Staff because StaffMainWindow
+# has no Matplotlib — no nested event loop conflict.
+
+_COMBO_STYLE = (
+    f"QComboBox {{ border: 1px solid {BORDER}; border-radius: 8px;"
+    f" padding: 8px; color: {TEXT}; background-color: {WHITE}; }}"
+    f" QComboBox QAbstractItemView {{ background: {WHITE}; color: {TEXT};"
+    " selection-background-color: #d0eaf8; }"
+)
+
 
 class BaseTransactionDialog(QDialog):
     def __init__(self, title, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setFixedSize(400, 500)
-        self.setStyleSheet("""
-            QDialog { background-color: white; }
-            QLabel { color: black; font-weight: bold; margin-bottom: 2px; }
-            QLabel#Header { color: #0076aa; font-size: 20px; margin-bottom: 15px; }
-            QLineEdit, QSpinBox, QTextEdit, QComboBox { 
-                border: 1px solid #ccc; border-radius: 8px; padding: 8px; color: black; background-color: white;
-            }
-            QPushButton { border-radius: 8px; padding: 8px 20px; font-weight: bold; }
+        self.setFixedSize(420, 500)
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {WHITE}; }}
+            QLabel {{ color: {TEXT}; font-weight: bold; margin-bottom: 2px; border: none; }}
+            QLabel#Header {{ color: {PRIMARY}; font-size: 20px; margin-bottom: 15px; }}
+            QLineEdit, QSpinBox, QTextEdit, QComboBox {{
+                border: 1px solid {BORDER}; border-radius: 8px;
+                padding: 8px; color: {TEXT}; background-color: {WHITE};
+            }}
+            QPushButton {{ border-radius: 8px; padding: 8px 20px;
+                           font-weight: bold; color: white; }}
         """)
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(40, 30, 40, 30)
-        self.layout.setSpacing(10)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(40, 30, 40, 30)
+        self._layout.setSpacing(10)
         self.title_lbl = QLabel(title)
         self.title_lbl.setObjectName("Header")
         self.title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(self.title_lbl)
+        self._layout.addWidget(self.title_lbl)
 
-    def add_centered_field(self, label_text, widget):
+    def add_field(self, label_text, widget):
         lbl = QLabel(label_text)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.layout.addWidget(lbl)
-        self.layout.addWidget(widget)
-        self.layout.addSpacing(10)
+        self._layout.addWidget(lbl)
+        self._layout.addWidget(widget)
+        self._layout.addSpacing(6)
 
-    def add_buttons(self, color):
-        self.layout.addStretch()
+    def add_buttons(self, confirm_color):
+        self._layout.addStretch()
         h = QHBoxLayout()
         h.setSpacing(15)
         cancel = QPushButton("Cancel")
         cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel.setStyleSheet("background-color: #777; color: white;")
+        cancel.setStyleSheet("QPushButton { background-color: #888; color: white;"
+                             " border-radius: 8px; padding: 8px 20px; font-weight: bold; }")
         cancel.clicked.connect(self.reject)
-        save = QPushButton("Confirm")
-        save.setCursor(Qt.CursorShape.PointingHandCursor)
-        save.setStyleSheet(f"background-color: {color}; color: white;")
-        save.clicked.connect(self.accept)
+        confirm = QPushButton("Confirm")
+        confirm.setCursor(Qt.CursorShape.PointingHandCursor)
+        confirm.setStyleSheet(
+            f"QPushButton {{ background-color: {confirm_color}; color: white;"
+            " border-radius: 8px; padding: 8px 20px; font-weight: bold; }")
+        confirm.clicked.connect(self.accept)
         h.addWidget(cancel)
-        h.addWidget(save)
-        self.layout.addLayout(h)
+        h.addWidget(confirm)
+        self._layout.addLayout(h)
 
 
 class StockInDialog(BaseTransactionDialog):
-    def __init__(self, product_list, parent=None):
+    def __init__(self, product_list, parent=None, preselected_id=None):
         super().__init__("Stock In", parent)
         self.selected_product_id = None
+
         self.product_combo = QComboBox()
         self.product_combo.setEditable(True)
         for p in product_list:
-            display = f"{p['product_name']} ({p.get('brand', '')})"
-            self.product_combo.addItem(display, userData=p)
-        self.product_combo.currentIndexChanged.connect(self.update_stock_info)
-        self.add_centered_field("Select Product", self.product_combo)
+            self.product_combo.addItem(
+                f"{p['product_name']} ({p.get('brand', '')})", userData=p)
+        self.product_combo.currentIndexChanged.connect(self._update_info)
+        self.add_field("Select Product", self.product_combo)
 
-        self.stock_info_lbl = QLabel("Current Stock: -")
-        self.stock_info_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.stock_info_lbl.setStyleSheet("color: #555; font-weight: normal;")
-        self.layout.addWidget(self.stock_info_lbl)
-        self.layout.addSpacing(10)
+        self.stock_lbl = QLabel("Current Stock: —")
+        self.stock_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stock_lbl.setStyleSheet(
+            f"color: {SUBTEXT}; font-weight: normal; border: none;")
+        self._layout.addWidget(self.stock_lbl)
 
         self.qty = QSpinBox()
         self.qty.setRange(1, 10000)
         self.qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qty.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.add_centered_field("Add Quantity", self.qty)
+        self.add_field("Add Quantity", self.qty)
 
-        self.rem = QLineEdit()
-        self.rem.setPlaceholderText("Remarks...")
-        self.rem.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.add_centered_field("Remarks", self.rem)
-        self.add_buttons("#2E7D32")
-        self.update_stock_info()
+        self.remarks = QLineEdit()
+        self.remarks.setPlaceholderText("Remarks (optional)")
+        self.remarks.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.add_field("Remarks", self.remarks)
+        self.add_buttons(SUCCESS)
+        self._update_info()
+        if preselected_id is not None:
+            self._preselect(preselected_id)
 
-    def update_stock_info(self):
-        index = self.product_combo.currentIndex()
-        if index >= 0:
-            data = self.product_combo.itemData(index)
-            self.stock_info_lbl.setText(f"Current Stock: {data['stock_quantity']}")
-            self.selected_product_id = data['product_id']
+    def _preselect(self, product_id):
+        for i in range(self.product_combo.count()):
+            d = self.product_combo.itemData(i)
+            if d and d['product_id'] == product_id:
+                self.product_combo.setCurrentIndex(i)
+                break
+
+    def _update_info(self):
+        idx = self.product_combo.currentIndex()
+        if idx >= 0:
+            data = self.product_combo.itemData(idx)
+            if data:
+                self.stock_lbl.setText(f"Current Stock: {data['stock_quantity']}")
+                self.selected_product_id = data['product_id']
 
     def get_data(self):
-        return self.selected_product_id, self.qty.value(), self.rem.text()
+        return self.selected_product_id, self.qty.value(), self.remarks.text()
 
 
 class StockOutDialog(BaseTransactionDialog):
-    def __init__(self, product_list, parent=None):
+    def __init__(self, product_list, parent=None, preselected_id=None):
         super().__init__("Stock Out", parent)
         self.selected_product_id = None
+
         self.product_combo = QComboBox()
         self.product_combo.setEditable(True)
         for p in product_list:
-            display = f"{p['product_name']} ({p.get('brand', '')})"
-            self.product_combo.addItem(display, userData=p)
-        self.product_combo.currentIndexChanged.connect(self.update_stock_info)
-        self.add_centered_field("Select Product", self.product_combo)
+            self.product_combo.addItem(
+                f"{p['product_name']} ({p.get('brand', '')})", userData=p)
+        self.product_combo.currentIndexChanged.connect(self._update_info)
+        self.add_field("Select Product", self.product_combo)
 
-        self.stock_info_lbl = QLabel("Current Stock: -")
-        self.stock_info_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.stock_info_lbl.setStyleSheet("color: #555; font-weight: normal;")
-        self.layout.addWidget(self.stock_info_lbl)
-        self.layout.addSpacing(10)
+        self.stock_lbl = QLabel("Current Stock: —")
+        self.stock_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stock_lbl.setStyleSheet(
+            f"color: {SUBTEXT}; font-weight: normal; border: none;")
+        self._layout.addWidget(self.stock_lbl)
 
         self.qty = QSpinBox()
         self.qty.setRange(1, 1)
         self.qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qty.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.add_centered_field("Remove Quantity", self.qty)
+        self.add_field("Remove Quantity", self.qty)
 
         self.reason = QLineEdit()
-        self.reason.setPlaceholderText("Reason...")
+        self.reason.setPlaceholderText("Reason")
         self.reason.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.add_centered_field("Reason", self.reason)
-        self.add_buttons("#0076aa")
-        self.update_stock_info()
+        self.add_field("Reason", self.reason)
+        self.add_buttons(PRIMARY)
+        self._update_info()
+        if preselected_id is not None:
+            self._preselect(preselected_id)
 
-    def update_stock_info(self):
-        index = self.product_combo.currentIndex()
-        if index >= 0:
-            data = self.product_combo.itemData(index)
-            stock = data['stock_quantity']
-            self.stock_info_lbl.setText(f"Current Stock: {stock}")
-            self.selected_product_id = data['product_id']
-            if stock > 0:
-                self.qty.setRange(1, stock)
-                self.qty.setEnabled(True)
-            else:
-                self.qty.setRange(0, 0)
-                self.qty.setEnabled(False)
+    def _preselect(self, product_id):
+        for i in range(self.product_combo.count()):
+            d = self.product_combo.itemData(i)
+            if d and d['product_id'] == product_id:
+                self.product_combo.setCurrentIndex(i)
+                break
+
+    def _update_info(self):
+        idx = self.product_combo.currentIndex()
+        if idx >= 0:
+            data = self.product_combo.itemData(idx)
+            if data:
+                stock = data['stock_quantity']
+                self.stock_lbl.setText(f"Current Stock: {stock}")
+                self.selected_product_id = data['product_id']
+                if stock > 0:
+                    self.qty.setRange(1, stock)
+                    self.qty.setEnabled(True)
+                else:
+                    self.qty.setRange(0, 0)
+                    self.qty.setEnabled(False)
 
     def get_data(self):
         return self.selected_product_id, self.qty.value(), self.reason.text()
 
 
 class DefectDialog(BaseTransactionDialog):
-    def __init__(self, product_list, parent=None):
+    def __init__(self, product_list, parent=None, preselected_id=None):
         super().__init__("Report Defect", parent)
         self.selected_product_id = None
+
         self.product_combo = QComboBox()
         self.product_combo.setEditable(True)
         for p in product_list:
-            display = f"{p['product_name']} ({p.get('brand', '')})"
-            self.product_combo.addItem(display, userData=p)
-        self.product_combo.currentIndexChanged.connect(self.update_stock_info)
-        self.add_centered_field("Select Product", self.product_combo)
+            self.product_combo.addItem(
+                f"{p['product_name']} ({p.get('brand', '')})", userData=p)
+        self.product_combo.currentIndexChanged.connect(self._update_info)
+        self.add_field("Select Product", self.product_combo)
 
-        self.stock_info_lbl = QLabel("Current Stock: -")
-        self.stock_info_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.stock_info_lbl.setStyleSheet("color: #555; font-weight: normal;")
-        self.layout.addWidget(self.stock_info_lbl)
-        self.layout.addSpacing(10)
+        self.stock_lbl = QLabel("Current Stock: —")
+        self.stock_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.stock_lbl.setStyleSheet(
+            f"color: {SUBTEXT}; font-weight: normal; border: none;")
+        self._layout.addWidget(self.stock_lbl)
 
         self.qty = QSpinBox()
         self.qty.setRange(1, 1)
         self.qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.qty.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.add_centered_field("Defective Qty", self.qty)
+        self.add_field("Defective Qty", self.qty)
 
-        self.type = QComboBox()
-        self.type.addItems(["Damaged", "Expired", "Missing Parts", "Other"])
-        self.add_centered_field("Defect Type", self.type)
+        self.defect_type = QComboBox()
+        self.defect_type.addItems(["Damaged", "Expired", "Missing Parts", "Other"])
+        self.add_field("Defect Type", self.defect_type)
 
         self.desc = QTextEdit()
         self.desc.setFixedHeight(60)
-        self.add_centered_field("Description", self.desc)
-        self.add_buttons("#D32F2F")
-        self.update_stock_info()
+        self.desc.setPlaceholderText("Description (optional)")
+        self.add_field("Description", self.desc)
+        self.add_buttons(DANGER)
+        self._update_info()
+        if preselected_id is not None:
+            self._preselect(preselected_id)
 
-    def update_stock_info(self):
-        index = self.product_combo.currentIndex()
-        if index >= 0:
-            data = self.product_combo.itemData(index)
-            stock = data['stock_quantity']
-            self.stock_info_lbl.setText(f"Current Stock: {stock}")
-            self.selected_product_id = data['product_id']
-            if stock > 0:
-                self.qty.setRange(1, stock)
-                self.qty.setEnabled(True)
-            else:
-                self.qty.setRange(0, 0)
-                self.qty.setEnabled(False)
+    def _preselect(self, product_id):
+        for i in range(self.product_combo.count()):
+            d = self.product_combo.itemData(i)
+            if d and d['product_id'] == product_id:
+                self.product_combo.setCurrentIndex(i)
+                break
+
+    def _update_info(self):
+        idx = self.product_combo.currentIndex()
+        if idx >= 0:
+            data = self.product_combo.itemData(idx)
+            if data:
+                stock = data['stock_quantity']
+                self.stock_lbl.setText(f"Current Stock: {stock}")
+                self.selected_product_id = data['product_id']
+                if stock > 0:
+                    self.qty.setRange(1, stock)
+                    self.qty.setEnabled(True)
+                else:
+                    self.qty.setRange(0, 0)
+                    self.qty.setEnabled(False)
 
     def get_data(self):
-        return self.selected_product_id, self.qty.value(), f"{self.type.currentText()} - {self.desc.toPlainText()}"
+        return (
+            self.selected_product_id,
+            self.qty.value(),
+            self.defect_type.currentText(),
+            self.desc.toPlainText().strip()
+        )
