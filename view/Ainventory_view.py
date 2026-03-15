@@ -43,7 +43,7 @@ class ToggleTableWidget(QTableWidget):
 class ProductDetailsView(QWidget):
     add_product_clicked         = pyqtSignal()
     refresh_clicked             = pyqtSignal()
-    product_selected            = pyqtSignal(int)
+    product_double_clicked      = pyqtSignal(int)
     filter_all_clicked          = pyqtSignal()
     filter_low_stock_clicked    = pyqtSignal()
     filter_out_of_stock_clicked = pyqtSignal()
@@ -264,13 +264,13 @@ class ProductDetailsView(QWidget):
                 background-color: #fafafa;
             }}
         """)
-        self.product_table.cellClicked.connect(self._on_cell_clicked)
+        self.product_table.cellDoubleClicked.connect(self._on_cell_clicked)
 
     def _on_cell_clicked(self, row, col):
         item = self.product_table.item(row, 0)
         if item:
             try:
-                self.product_selected.emit(int(item.text()))
+                self.product_double_clicked.emit(int(item.text()))
             except ValueError:
                 pass
 
@@ -516,13 +516,18 @@ class ProductDetailsView(QWidget):
 
 
 # ── ADD PRODUCT DIALOG ────────────────────────────────────────────────────────
-class AddProductDialog(QDialog):
+class AddProductDialog(QWidget):
+    product_name_changed = pyqtSignal(str)
+    confirmed            = pyqtSignal(dict)
+    cancelled            = pyqtSignal()
+
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setWindowTitle("Add New Product")
         self.setFixedSize(460, 560)
         self.setStyleSheet(f"""
-            QDialog {{ background-color: {WHITE}; }}
+            QWidget {{ background-color: {WHITE}; }}
             QLabel {{ color: {TEXT}; font-weight: bold; margin-bottom: 2px; border: none; }}
             QLabel#Header {{ color: {PRIMARY}; font-size: 18px; margin-bottom: 10px; }}
             QLineEdit, QSpinBox, QTextEdit, QComboBox {{
@@ -658,11 +663,11 @@ class AddProductDialog(QDialog):
         cancel = QPushButton("Cancel")
         cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel.setStyleSheet("background-color: #ccc; color: #333;")
-        cancel.clicked.connect(self.reject)
+        cancel.clicked.connect(self._on_cancel)
         save = QPushButton("Add Product")
         save.setCursor(Qt.CursorShape.PointingHandCursor)
         save.setStyleSheet(f"background-color: {TEAL}; color: white;")
-        save.clicked.connect(self.accept)
+        save.clicked.connect(self._on_confirm)
         btn_row.addWidget(cancel)
         btn_row.addWidget(save)
         layout.addLayout(btn_row)
@@ -730,6 +735,16 @@ class AddProductDialog(QDialog):
         idx = self.category_input.findText(cat)
         if idx >= 0:
             self.category_input.setCurrentIndex(idx)
+
+    def _on_confirm(self):
+        """Emit confirmed signal with form data — avoids QDialog.exec() crash."""
+        self.confirmed.emit(self.get_data())
+        self.close()
+
+    def _on_cancel(self):
+        """Emit cancelled signal and close."""
+        self.cancelled.emit()
+        self.close()
 
     def get_data(self) -> Dict:
         cat = self.category_input.currentText()

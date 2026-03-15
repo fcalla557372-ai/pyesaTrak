@@ -48,8 +48,15 @@ class LoginController:
 
             elif user_role == "Staff":
                 # Staff goes straight to inventory — no dashboard
-                from controller.SIController import StaffMainWindow
+                from view.SIView import StaffMainWindow
+                from model.SIModel import InventoryModel
+                from controller.SIController import InventoryController
                 self.staff_window = StaffMainWindow(self.current_user)
+                # Wire sign-out: View emits signal, Controller handles navigation
+                self.staff_window.sign_out_requested.connect(self._handle_staff_sign_out)
+                inv_model = InventoryModel()
+                self.staff_inv_controller = InventoryController(
+                    inv_model, self.staff_window.inventory_view, self.current_user)
                 self.staff_window.show()
 
             else:
@@ -89,6 +96,18 @@ class LoginController:
         else:
             msg_box.setIcon(QMessageBox.Icon.Warning)
         msg_box.exec()
+
+    def _handle_staff_sign_out(self):
+        """Called when Staff clicks Sign Out and confirms. Re-opens the login window."""
+        try:
+            from view.login_view import LoginView
+            from model.login_model import LoginModel
+            self.lc = LoginController(LoginView(), LoginModel())
+            self.lc.show()
+            if self.staff_window:
+                self.staff_window.close()
+        except Exception as e:
+            print(f"Error returning to login: {e}")
 
     def show(self):
         self.view.show()

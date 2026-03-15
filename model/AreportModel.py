@@ -382,6 +382,81 @@ class ReportsModel:
         finally:
             if conn: conn.close()
 
+    def get_low_stock_report(self):
+        """Return all products currently at low stock (qty <= 10, qty > 0)."""
+        conn = self.connect()
+        if not conn: return []
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT product_id, product_name, brand, model,
+                       category, stock_quantity,
+                       'Low Stock' as status,
+                       DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') as last_updated
+                FROM inventory
+                WHERE stock_quantity <= 10 AND stock_quantity > 0
+                ORDER BY stock_quantity ASC
+            """)
+            return cursor.fetchall()
+        except Error as e:
+            print(f"Error fetching Low Stock Report: {e}")
+            return []
+        finally:
+            if conn: conn.close()
+
+    def get_out_of_stock_report(self):
+        """Return all products currently out of stock (qty = 0)."""
+        conn = self.connect()
+        if not conn: return []
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT product_id, product_name, brand, model,
+                       category, stock_quantity,
+                       'Out of Stock' as status,
+                       DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i') as last_updated
+                FROM inventory
+                WHERE stock_quantity = 0
+                ORDER BY product_name ASC
+            """)
+            return cursor.fetchall()
+        except Error as e:
+            print(f"Error fetching Out of Stock Report: {e}")
+            return []
+        finally:
+            if conn: conn.close()
+
+    def get_defective_stock_report(self, start, end):
+        """Return defective items with their defect_id within a date range."""
+        conn = self.connect()
+        if not conn: return []
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("""
+                SELECT
+                    d.defect_id,
+                    DATE_FORMAT(d.reported_at, '%Y-%m-%d %H:%i') as reported_date,
+                    i.product_id,
+                    i.product_name,
+                    i.brand,
+                    i.category,
+                    d.defective_qty,
+                    d.defect_type,
+                    d.description,
+                    CONCAT(u.userFname, ' ', u.userLname) as reported_by
+                FROM defective_items d
+                JOIN inventory i  ON d.product_id = i.product_id
+                LEFT JOIN users u ON d.reported_by = u.user_id
+                WHERE d.reported_at BETWEEN %s AND %s
+                ORDER BY d.reported_at DESC
+            """, (f"{start} 00:00:00", f"{end} 23:59:59"))
+            return cursor.fetchall()
+        except Error as e:
+            print(f"Error fetching Defective Stock Report: {e}")
+            return []
+        finally:
+            if conn: conn.close()
+
     def get_user_activity(self, start, end):
         conn = self.connect()
         if not conn: return []

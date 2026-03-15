@@ -1,15 +1,8 @@
 # AreportController.py - Updated with Analytics loading
 from model.AreportModel import ReportsModel
-from view.AreportsView import ReportDetailDialog
+from view.AreportsView import ReportDetailDialog, ReportExporter
 from PyQt6.QtWidgets import QMessageBox, QFileDialog
 from datetime import datetime
-
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.units import inch
 
 
 class ReportsController:
@@ -25,7 +18,7 @@ class ReportsController:
         self.view = view
         self.view.generate_btn.clicked.connect(self.handle_generate_report)
         self.view.export_btn.clicked.connect(self.handle_export_report)
-        self.view.row_clicked.connect(self.handle_report_row_clicked)
+        self.view.row_double_clicked.connect(self.handle_report_row_clicked)
         self.load_report_history()
 
     def load_report_history(self):
@@ -52,6 +45,12 @@ class ReportsController:
                 data = self.model.get_inventory_status()
             elif rtype == "Defects Report":
                 data = self.model.get_defective_report(start, end)
+            elif rtype == "Low Stock Report":
+                data = self.model.get_low_stock_report()
+            elif rtype == "Out of Stock Report":
+                data = self.model.get_out_of_stock_report()
+            elif rtype == "Defective Stock Report":
+                data = self.model.get_defective_stock_report(start, end)
             elif rtype == "User Activity":
                 data = self.model.get_user_activity(start, end)
 
@@ -99,126 +98,13 @@ class ReportsController:
                 self.show_styled_message("Error", f"Export failed: {e}", "Critical")
 
     def generate_pdf(self, filename):
-        doc = SimpleDocTemplate(
-            filename, pagesize=letter,
-            rightMargin=0.75*inch, leftMargin=0.75*inch,
-            topMargin=1*inch, bottomMargin=0.75*inch)
-
-        elements = []
-        styles   = getSampleStyleSheet()
-
-        title_style = ParagraphStyle(
-            'CustomTitle', parent=styles['Heading1'],
-            fontSize=24, textColor=colors.HexColor("#0076aa"),
-            spaceAfter=30, alignment=TA_CENTER, fontName='Helvetica-Bold')
-
-        header_style = ParagraphStyle(
-            'CustomHeader', parent=styles['Heading2'],
-            fontSize=14, textColor=colors.HexColor("#333333"),
-            spaceAfter=12, fontName='Helvetica-Bold')
-
-        elements.append(Paragraph("PyesaTrak Inventory Management System", title_style))
-        elements.append(Paragraph(self.current_report_type, header_style))
-        elements.append(Spacer(1, 20))
-
-        if self.user_data:
-            fname = self.user_data.get('userFname', '')
-            lname = self.user_data.get('userLname', '')
-            full_name = f"{fname} {lname}".strip() or self.user_data.get('username', 'Unknown')
-            role      = self.user_data.get('role', 'N/A')
-        else:
-            full_name = "System Admin"
-            role      = "Admin"
-
-        full_name_with_role = f"{full_name} ({role})"
-        transaction_datetime = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-
-        metadata = [
-            ["Requested By:",    full_name_with_role],
-            ["Processed By:",    full_name_with_role],
-            ["Transaction Date:", transaction_datetime],
-            ["Validated By:",    "_____________________"],
-        ]
-        if self.current_report_type != "Inventory Status":
-            metadata.append([
-                "Report Period:",
-                f"{self.current_date_range['start']} to {self.current_date_range['end']}"
-            ])
-        metadata.append(["Total Records:", str(len(self.current_report_data))])
-
-        meta_table = Table(metadata, colWidths=[2*inch, 4*inch])
-        meta_table.setStyle(TableStyle([
-            ('FONT',      (0, 0), (0, -1), 'Helvetica-Bold', 11),
-            ('FONT',      (1, 0), (1, -1), 'Helvetica',      11),
-            ('TEXTCOLOR', (0, 0), (-1,-1), colors.HexColor("#333333")),
-            ('VALIGN',    (0, 0), (-1,-1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0,0),(-1,-1), 8),
-            ('TOPPADDING',    (0,0),(-1,-1), 4),
-        ]))
-        elements.append(meta_table)
-        elements.append(Spacer(1, 30))
-
-        if not self.current_report_data:
-            elements.append(Paragraph("No data available for this selection.", styles['Normal']))
-        else:
-            headers   = [k.replace('_', ' ').title() for k in self.current_report_data[0].keys()]
-            data_rows = [headers]
-            for row in self.current_report_data:
-                data_rows.append([str(v) if v is not None else "" for v in row.values()])
-
-            data_table = Table(data_rows)
-            data_table.setStyle(TableStyle([
-                ('BACKGROUND',    (0,0), (-1,0),  colors.HexColor("#0076aa")),
-                ('TEXTCOLOR',     (0,0), (-1,0),  colors.whitesmoke),
-                ('ALIGN',         (0,0), (-1,0),  'CENTER'),
-                ('FONTNAME',      (0,0), (-1,0),  'Helvetica-Bold'),
-                ('FONTSIZE',      (0,0), (-1,0),  10),
-                ('BOTTOMPADDING', (0,0), (-1,0),  12),
-                ('TOPPADDING',    (0,0), (-1,0),  12),
-                ('BACKGROUND',    (0,1), (-1,-1), colors.white),
-                ('TEXTCOLOR',     (0,1), (-1,-1), colors.black),
-                ('ALIGN',         (0,1), (-1,-1), 'LEFT'),
-                ('FONTNAME',      (0,1), (-1,-1), 'Helvetica'),
-                ('FONTSIZE',      (0,1), (-1,-1), 9),
-                ('TOPPADDING',    (0,1), (-1,-1), 6),
-                ('BOTTOMPADDING', (0,1), (-1,-1), 6),
-                ('GRID',          (0,0), (-1,-1), 0.5, colors.grey),
-                ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
-                ('ROWBACKGROUNDS',(0,1), (-1,-1),
-                 [colors.white, colors.HexColor("#f5f5f5")]),
-            ]))
-            elements.append(data_table)
-
-        elements.append(Spacer(1, 40))
-        elements.append(Paragraph("Validation & Approval", header_style))
-        elements.append(Spacer(1, 10))
-
-        sig_data = [
-            ["Validated By:", "_____________________", "Date:", "_____________________"],
-            ["", "", "", ""],
-            ["Signature:",    "_____________________", "Position:", "_____________________"],
-        ]
-        sig_table = Table(sig_data,
-                          colWidths=[1.2*inch, 2*inch, 0.8*inch, 2*inch])
-        sig_table.setStyle(TableStyle([
-            ('FONT', (0,0),(0,-1), 'Helvetica-Bold', 10),
-            ('FONT', (2,0),(2,-1), 'Helvetica-Bold', 10),
-            ('FONT', (1,0),(1,-1), 'Helvetica', 10),
-            ('FONT', (3,0),(3,-1), 'Helvetica', 10),
-            ('TEXTCOLOR', (0,0),(-1,-1), colors.HexColor("#333333")),
-            ('VALIGN',    (0,0),(-1,-1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0,0),(-1,-1), 8),
-        ]))
-        elements.append(sig_table)
-        elements.append(Spacer(1, 30))
-        elements.append(Paragraph(
-            "<i>This is a computer-generated report from PyesaTrak Inventory Management System. "
-            "All data is accurate as of the transaction date listed above.</i>",
-            ParagraphStyle('Footer', parent=styles['Normal'],
-                           fontSize=8, textColor=colors.grey, alignment=TA_CENTER)
-        ))
-
-        doc.build(elements)
+        ReportExporter().generate(
+            filename=filename,
+            report_type=self.current_report_type,
+            date_range=self.current_date_range,
+            data=self.current_report_data,
+            user_data=self.user_data,
+        )
         print(f"✓ PDF exported: {filename}")
 
     def handle_report_row_clicked(self, report_id: int):

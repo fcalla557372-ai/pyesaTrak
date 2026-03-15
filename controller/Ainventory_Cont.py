@@ -37,7 +37,7 @@ class ProductDetailsController:
     def _connect_signals(self):
         """Connect View signals to Controller handlers"""
         self.view.add_product_clicked.connect(self.handle_add_product)
-        self.view.product_selected.connect(self.handle_product_selected)
+        self.view.product_double_clicked.connect(self.handle_product_selected)
 
         # Filter tab signals
         self.view.filter_all_clicked.connect(self.load_all_products)
@@ -106,57 +106,62 @@ class ProductDetailsController:
         Handle add product button click.
         Business logic + validation + coordination.
         """
-        # Show dialog to collect data
+        # Use show() instead of exec() to avoid 0xC0000409 crash with Matplotlib QtAgg
         dialog = AddProductDialog(self.view)
 
-        if dialog.exec():
-            # Get raw data from View
-            data = dialog.get_data()
+        # Wire product name → category auto-detection
+        dialog.product_name_changed.connect(
+            lambda text: dialog.set_suggested_category(self._detect_category(text))
+        )
 
-            # VALIDATION (Controller's responsibility)
-            validation_error = self._validate_product_data(data)
-            if validation_error:
-                QMessageBox.warning(
-                    self.view,
-                    "Validation Error",
-                    validation_error
-                )
-                return
+        # Wire confirmed signal — runs when user clicks Add Product
+        dialog.confirmed.connect(self._process_add_product)
 
-            # BUSINESS LOGIC: Determine status based on quantity
-            status = self._determine_product_status(data['stock_quantity'])
+        # Keep reference so dialog isn't garbage collected
+        self._add_dialog = dialog
+        dialog.show()
 
-            # Get user ID
-            user_id = self._get_current_user_id()
+    def _process_add_product(self, data: dict):
+        """Process the add product form data after user confirms."""
+        # VALIDATION (Controller's responsibility)
+        validation_error = self._validate_product_data(data)
+        if validation_error:
+            QMessageBox.warning(self.view, "Validation Error", validation_error)
+            return
 
-            # Delegate to Model (pass individual params, not dict)
-            success = self.model.add_new_product(
-                product_name=data['product_name'],
-                brand=data['brand'],
-                model=data['model'],
-                description=data['description'],
-                stock_quantity=data['stock_quantity'],
-                status=status,
-                user_id=user_id,
-                category=data.get('category')
+        # BUSINESS LOGIC: Determine status based on quantity
+        status = self._determine_product_status(data['stock_quantity'])
+
+        # Get user ID
+        user_id = self._get_current_user_id()
+
+        # Delegate to Model
+        success = self.model.add_new_product(
+            product_name=data['product_name'],
+            brand=data['brand'],
+            model=data['model'],
+            description=data['description'],
+            stock_quantity=data['stock_quantity'],
+            status=status,
+            user_id=user_id,
+            category=data.get('category')
+        )
+
+        # USER FEEDBACK (Controller's responsibility)
+        if success:
+            QMessageBox.information(
+                self.view,
+                "Success",
+                f"Product '{data['product_name']}' added successfully!"
             )
-
-            # USER FEEDBACK (Controller's responsibility)
-            if success:
-                QMessageBox.information(
-                    self.view,
-                    "Success",
-                    f"Product '{data['product_name']}' added successfully!"
-                )
-                # Refresh display
-                self.load_all_products()
-                self._populate_filter_combos()
-            else:
-                QMessageBox.critical(
-                    self.view,
-                    "Error",
-                    "Failed to add product. Please try again."
-                )
+            self.load_all_products()
+            self._populate_filter_combos()
+        else:
+            QMessageBox.critical(
+                self.view,
+                "Error",
+                "Failed to add product. Please try again."
+            )
 
     def handle_product_selected(self, product_id: int):
         """Show a detail dialog for the selected product."""

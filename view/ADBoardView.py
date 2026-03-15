@@ -417,7 +417,7 @@ class DashboardView(QWidget):
         header_row.addWidget(ref_btn)
         layout.addLayout(header_row)
 
-        # ── KPI Cards — 2 × 2 grid ───────────────────────────────────────────
+        # ── KPI Cards — 2 × 3 grid ───────────────────────────────────────────────
         kpi_grid = QGridLayout()
         kpi_grid.setSpacing(16)
 
@@ -443,12 +443,19 @@ class DashboardView(QWidget):
             on_click=lambda: self.kpi_low_stock_clicked.emit(),
             accent=self.COLORS['warning'])
 
+        self.card_def, self.lbl_def = self.create_borderless_kpi(
+            'Defective Items', '0', 'Total defects reported',
+            self.COLORS['purple'], clickable=True,
+            on_click=lambda: self.kpi_defective_clicked.emit(),
+            accent=self.COLORS['purple'])
+
         kpi_grid.addWidget(self.card_prod,   0, 0)
         kpi_grid.addWidget(self.card_inflow, 0, 1)
-        kpi_grid.addWidget(self.card_out,    1, 0)
-        kpi_grid.addWidget(self.card_low,    1, 1)
-        layout.addLayout(kpi_grid)
+        kpi_grid.addWidget(self.card_out,    0, 2)
+        kpi_grid.addWidget(self.card_low,    1, 0)
+        kpi_grid.addWidget(self.card_def,    1, 1)
 
+        layout.addLayout(kpi_grid)
         # ── Chart (full width) ───────────────────────────────────────────────
         flow_frame = QFrame()
         flow_frame.setMinimumHeight(340)
@@ -674,6 +681,7 @@ class DashboardView(QWidget):
         self.lbl_inflow.setText(f'+{w_in}')
         self.lbl_out.setText(f'-{w_out}')
         self.lbl_low.setText(str(data.get('low_stock_count', 0)))
+        self.lbl_def.setText(str(data.get('defective_count', 0)))
 
         self.flow_chart.update_chart(weekly)
 
