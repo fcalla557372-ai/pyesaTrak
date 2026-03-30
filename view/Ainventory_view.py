@@ -1,11 +1,18 @@
-# Ainventory_view.py — REDESIGNED (dropdown filter, search bar, back-to-dashboard)
+# Ainventory_view.py — Admin Inventory View
+# ============================================================
+# VIEW LAYER — Responsibilities:
+#   - All UI widgets, layouts, styling
+#   - Emit pyqtSignals for every user action
+#   - Local client-side filtering (category/brand/search)
+#   - NO database queries, NO business logic, NO validation
+# ============================================================
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QFrame, QDialog,
     QFormLayout, QSpinBox, QLineEdit, QTextEdit, QComboBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont, QColor, QIcon
+from PyQt6.QtGui import QFont, QColor
 from typing import List, Dict, Optional
 
 PRIMARY = '#0076aa'
@@ -19,7 +26,6 @@ WARNING = '#F57C00'
 SUCCESS = '#388E3C'
 BORDER  = '#E0E0E0'
 
-# Maps dropdown text → filter key → signal name
 _FILTER_OPTIONS = [
     ("All Items",    "All"),
     ("Low Stock",    "Low"),
@@ -50,23 +56,22 @@ class ProductDetailsView(QWidget):
     filter_defective_clicked    = pyqtSignal()
     filter_by_brand_clicked     = pyqtSignal(str)
     filter_by_category_clicked  = pyqtSignal(str)
-    back_to_dashboard_clicked   = pyqtSignal()   # ← NEW
+    back_to_dashboard_clicked   = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self._active_filter   = "All"
-        self._active_category = ""    # tracks current category selection
-        self._active_brand    = ""    # tracks current brand selection
-        self._all_products: List[Dict] = []   # full unfiltered cache (all products)
-        self._all_defects:  List[Dict] = []   # cache for defect search filtering
-        self._current_mode = "normal"          # "normal" or "defect"
+        self._active_category = ""
+        self._active_brand    = ""
+        self._all_products: List[Dict] = []
+        self._all_defects:  List[Dict] = []
+        self._current_mode = "normal"
         self.init_ui()
 
-    # ── FILTER DROPDOWN HELPER ────────────────────────────────────────────────
+    # ── Filter dropdown ───────────────────────────────────────────────────────
     def _on_filter_changed(self, index):
         key = _FILTER_OPTIONS[index][1]
         self._active_filter = key
-        # Clear search so the new filter shows full results
         self.search_input.blockSignals(True)
         self.search_input.clear()
         self.search_input.blockSignals(False)
@@ -80,14 +85,13 @@ class ProductDetailsView(QWidget):
             signals[key].emit()
 
     def set_active_tab(self, tab_key):
-        """Controller calls this to sync the dropdown after KPI navigation."""
         self._active_filter = tab_key
         idx_map = {"All": 0, "Low": 1, "Out": 2, "Defect": 3, "Brand": 0, "Category": 0}
         self.filter_combo.blockSignals(True)
         self.filter_combo.setCurrentIndex(idx_map.get(tab_key, 0))
         self.filter_combo.blockSignals(False)
 
-    # ── INIT UI ───────────────────────────────────────────────────────────────
+    # ── UI build ──────────────────────────────────────────────────────────────
     def init_ui(self):
         self.setWindowTitle("PyesaTrak - Admin Inventory")
         self.setStyleSheet("background-color: transparent;")
@@ -97,12 +101,13 @@ class ProductDetailsView(QWidget):
         main_layout.setSpacing(0)
 
         card = QFrame()
-        card.setStyleSheet(f"QFrame {{ background-color: {WHITE}; border-radius: 10px; border: none; }}")
+        card.setStyleSheet(
+            f"QFrame {{ background-color: {WHITE}; border-radius: 10px; border: none; }}")
         cl = QVBoxLayout(card)
         cl.setContentsMargins(20, 16, 20, 16)
         cl.setSpacing(10)
 
-        # ── Row 1: Back button + Title ────────────────────────────────────────
+        # Row 1: Back button + Title
         title_row = QHBoxLayout()
         title_row.setSpacing(10)
 
@@ -127,11 +132,10 @@ class ProductDetailsView(QWidget):
         title_row.addStretch()
         cl.addLayout(title_row)
 
-        # ── Row 2: Search + Filter icon + Filter dropdown ─────────────────────
+        # Row 2: Search + Filter + Brand + Category + Add button
         ctrl_row = QHBoxLayout()
         ctrl_row.setSpacing(8)
 
-        # Search box (rounded, with 🔍 placeholder)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("🔍  Search")
         self.search_input.setFixedHeight(34)
@@ -147,23 +151,7 @@ class ProductDetailsView(QWidget):
         self.search_input.textChanged.connect(self._on_search)
         ctrl_row.addWidget(self.search_input)
 
-        # Filter label + icon
-        filter_lbl = QLabel("Filter")
-        filter_lbl.setStyleSheet(f"color: {TEXT}; font-weight: bold; font-size: 13px; border: none;")
-        ctrl_row.addWidget(filter_lbl)
-
-        # Filter icon (funnel emoji as label)
-        funnel = QLabel("▼")
-        funnel.setStyleSheet(f"color: {PRIMARY}; font-size: 13px; border: none;")
-        ctrl_row.addWidget(funnel)
-
-        # Filter dropdown
-        self.filter_combo = QComboBox()
-        for label, _ in _FILTER_OPTIONS:
-            self.filter_combo.addItem(label)
-        self.filter_combo.setFixedHeight(34)
-        self.filter_combo.setFixedWidth(150)
-        self.filter_combo.setStyleSheet(f"""
+        _combo_style = f"""
             QComboBox {{
                 border: 1px solid {BORDER}; border-radius: 6px;
                 padding: 4px 10px; color: {TEXT}; background: {WHITE};
@@ -175,43 +163,45 @@ class ProductDetailsView(QWidget):
                 selection-background-color: #d0eaf8;
                 border: 1px solid {BORDER};
             }}
-        """)
+        """
+        _lbl_style = f"color: {TEXT}; font-weight: bold; font-size: 13px; border: none;"
+
+        filter_lbl = QLabel("Filter")
+        filter_lbl.setStyleSheet(_lbl_style)
+        ctrl_row.addWidget(filter_lbl)
+
+        funnel = QLabel("▼")
+        funnel.setStyleSheet(f"color: {PRIMARY}; font-size: 13px; border: none;")
+        ctrl_row.addWidget(funnel)
+
+        self.filter_combo = QComboBox()
+        for label, _ in _FILTER_OPTIONS:
+            self.filter_combo.addItem(label)
+        self.filter_combo.setFixedHeight(34)
+        self.filter_combo.setFixedWidth(150)
+        self.filter_combo.setStyleSheet(_combo_style)
         self.filter_combo.currentIndexChanged.connect(self._on_filter_changed)
         ctrl_row.addWidget(self.filter_combo)
 
-        # ── Brand filter ─────────────────────────────────────────────────
         brand_lbl = QLabel("Brand:")
-        brand_lbl.setStyleSheet(f"color: {TEXT}; font-weight: bold; font-size: 13px; border: none;")
+        brand_lbl.setStyleSheet(_lbl_style)
         ctrl_row.addWidget(brand_lbl)
         self.brand_combo = QComboBox()
         self.brand_combo.addItem("All Brands")
         self.brand_combo.setFixedHeight(34)
         self.brand_combo.setFixedWidth(130)
-        self.brand_combo.setStyleSheet(f"""
-            QComboBox {{ border: 1px solid {BORDER}; border-radius: 6px;
-                padding: 4px 10px; color: {TEXT}; background: {WHITE}; font-size: 12px; }}
-            QComboBox:focus {{ border-color: {PRIMARY}; }}
-            QComboBox QAbstractItemView {{ background: {WHITE}; color: {TEXT};
-                selection-background-color: #d0eaf8; border: 1px solid {BORDER}; }}
-        """)
+        self.brand_combo.setStyleSheet(_combo_style)
         self.brand_combo.currentTextChanged.connect(self._on_brand_changed)
         ctrl_row.addWidget(self.brand_combo)
 
-        # ── Category filter ───────────────────────────────────────────────
         cat_lbl = QLabel("Category:")
-        cat_lbl.setStyleSheet(f"color: {TEXT}; font-weight: bold; font-size: 13px; border: none;")
+        cat_lbl.setStyleSheet(_lbl_style)
         ctrl_row.addWidget(cat_lbl)
         self.category_combo = QComboBox()
         self.category_combo.addItem("All Categories")
         self.category_combo.setFixedHeight(34)
         self.category_combo.setFixedWidth(155)
-        self.category_combo.setStyleSheet(f"""
-            QComboBox {{ border: 1px solid {BORDER}; border-radius: 6px;
-                padding: 4px 10px; color: {TEXT}; background: {WHITE}; font-size: 12px; }}
-            QComboBox:focus {{ border-color: {PRIMARY}; }}
-            QComboBox QAbstractItemView {{ background: {WHITE}; color: {TEXT};
-                selection-background-color: #d0eaf8; border: 1px solid {BORDER}; }}
-        """)
+        self.category_combo.setStyleSheet(_combo_style)
         self.category_combo.currentTextChanged.connect(self._on_category_changed)
         ctrl_row.addWidget(self.category_combo)
 
@@ -229,7 +219,7 @@ class ProductDetailsView(QWidget):
         ctrl_row.addStretch()
         cl.addLayout(ctrl_row)
 
-        # ── Table ──────────────────────────────────────────────────────────────
+        # Table
         self.product_table = ToggleTableWidget()
         self._setup_table()
         cl.addWidget(self.product_table)
@@ -238,17 +228,20 @@ class ProductDetailsView(QWidget):
 
     def _setup_table(self):
         self.product_table.verticalHeader().setVisible(False)
-        self.product_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.product_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.product_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.product_table.setShowGrid(False)
+        self.product_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows)
+        self.product_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection)
+        self.product_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.product_table.setShowGrid(True)
         self.product_table.setFrameShape(QFrame.Shape.NoFrame)
         self.product_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.product_table.setAlternatingRowColors(True)
         self.product_table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {WHITE}; border: none; color: {TEXT};
-                font-size: 13px; outline: 0;
+                font-size: 13px; outline: 0; gridline-color: #E0E0E0;
             }}
             QHeaderView::section {{
                 background-color: {TEXT}; color: white;
@@ -274,6 +267,7 @@ class ProductDetailsView(QWidget):
             except ValueError:
                 pass
 
+    # ── Local search ──────────────────────────────────────────────────────────
     def _on_search(self, text: str):
         q = text.strip().lower()
         if self._current_mode == "defect":
@@ -286,8 +280,6 @@ class ProductDetailsView(QWidget):
                       or q in p.get("defect_reason", "").lower()]
             )
         else:
-            # Start from the full product cache, then apply
-            # category → brand → text search in that order
             pool = self._all_products
             if self._active_category:
                 pool = [p for p in pool if p.get("category") == self._active_category]
@@ -301,7 +293,6 @@ class ProductDetailsView(QWidget):
             self._render_products(pool)
 
     def _on_brand_changed(self, text: str):
-        """Filter the visible table locally — no DB round-trip needed."""
         self._active_brand = text if (text and text != "All Brands") else ""
         pool = self._all_products
         if self._active_category:
@@ -317,17 +308,8 @@ class ProductDetailsView(QWidget):
         self._render_products(pool)
 
     def _on_category_changed(self, text: str):
-        """
-        When a category is selected:
-        1. Track the active category.
-        2. Repopulate brand dropdown to only brands present in that category.
-        3. Reset brand selection to All Brands.
-        4. Filter the table locally — no DB round-trip.
-        """
         self._active_category = text if (text and text != "All Categories") else ""
         self._active_brand = ""
-
-        # Repopulate brand dropdown for the selected category
         self.brand_combo.blockSignals(True)
         self.brand_combo.clear()
         self.brand_combo.addItem("All Brands")
@@ -343,8 +325,6 @@ class ProductDetailsView(QWidget):
         for b in brands_in_cat:
             self.brand_combo.addItem(b)
         self.brand_combo.blockSignals(False)
-
-        # Filter table locally
         pool = self._all_products
         if self._active_category:
             pool = [p for p in pool if p.get("category") == self._active_category]
@@ -356,9 +336,8 @@ class ProductDetailsView(QWidget):
                     or q in p.get("model", "").lower()]
         self._render_products(pool)
 
-    # ── POPULATE FILTER COMBOS ────────────────────────────────────────────────
+    # ── Populate filter dropdowns (called by controller) ──────────────────────
     def populate_brand_filter(self, brands: list):
-        """Called by controller to fill the brand dropdown on initial load."""
         self.brand_combo.blockSignals(True)
         self.brand_combo.clear()
         self.brand_combo.addItem("All Brands")
@@ -367,7 +346,6 @@ class ProductDetailsView(QWidget):
         self.brand_combo.blockSignals(False)
 
     def populate_category_filter(self, categories: list):
-        """Called by controller to fill the category dropdown on initial load."""
         self.category_combo.blockSignals(True)
         self.category_combo.clear()
         self.category_combo.addItem("All Categories")
@@ -375,17 +353,10 @@ class ProductDetailsView(QWidget):
             self.category_combo.addItem(c)
         self.category_combo.blockSignals(False)
 
-        # ── DATA DISPLAY ─────────────────────────────────────────────────────────
+    # ── Data display (called by controller) ───────────────────────────────────
     def display_products(self, products: List[Dict]):
-        """
-        Called by controller with the full product list (no category/brand filter).
-        Stores the complete list as the source-of-truth cache, then applies any
-        active category/brand/search selections locally.
-        """
         self._current_mode = "normal"
         self._all_products = list(products)
-
-        # Re-apply active filters so the view stays consistent after a refresh
         pool = self._all_products
         if self._active_category:
             pool = [p for p in pool if p.get("category") == self._active_category]
@@ -402,62 +373,50 @@ class ProductDetailsView(QWidget):
     def _render_products(self, products: List[Dict]):
         self.product_table.setColumnCount(8)
         self.product_table.setHorizontalHeaderLabels(
-            ["Product ID", "Product Name", "Category", "Brand", "Model", "Stock", "Status", "Date Added"])
-        self.product_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            ["Product ID", "Product Name", "Category", "Brand",
+             "Model", "Stock", "Status", "Date Added"])
+        self.product_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
         self.product_table.setRowCount(len(products))
         for row, p in enumerate(products):
             self.product_table.setRowHeight(row, 42)
             self.product_table.setItem(row, 0, self._make_item(str(p['product_id']), center=True))
             self.product_table.setItem(row, 1, self._make_item(p['product_name']))
-            cat = p.get('category', '') or '—'
-            self.product_table.setItem(row, 2, self._make_item(cat))
+            self.product_table.setItem(row, 2, self._make_item(p.get('category', '') or '—'))
             self.product_table.setItem(row, 3, self._make_item(p.get('brand', '')))
             self.product_table.setItem(row, 4, self._make_item(p.get('model', '')))
-            # Safely convert stock_quantity — handles None, '', or non-int values
+
             try:
                 qty = int(p['stock_quantity'] or 0)
             except (ValueError, TypeError):
                 qty = 0
 
             qty_item = self._make_item(str(qty), center=True)
-            if qty == 0:
-                qty_item.setForeground(QColor(DANGER))
-                qty_item.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-            elif qty <= 10:
+            if qty <= 10:
                 qty_item.setForeground(QColor(DANGER))
                 qty_item.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
             self.product_table.setItem(row, 5, qty_item)
 
-            # Derive status entirely from quantity (DB enum has no 'Low Stock')
             if qty == 0:
-                status = 'Out of Stock'
-                st_color = DANGER
+                status, st_color = 'Out of Stock', DANGER
             elif qty <= 10:
-                status = 'Low Stock'
-                st_color = WARNING
+                status, st_color = 'Low Stock', WARNING
             else:
-                status = 'Available'
-                st_color = SUCCESS
+                status, st_color = 'Available', SUCCESS
             st_item = self._make_item(status, center=True)
             st_item.setForeground(QColor(st_color))
             self.product_table.setItem(row, 6, st_item)
 
-            # Date Added — show "YYYY-MM-DD HH:MM" from the formatted string
             created_raw = p.get('created_at', '') or ''
-            # Handle both string (from DATE_FORMAT) and datetime objects
-            if hasattr(created_raw, 'strftime'):
-                created = created_raw.strftime('%Y-%m-%d %H:%M')
-            else:
-                created = str(created_raw)
+            created = (created_raw.strftime('%Y-%m-%d %H:%M')
+                       if hasattr(created_raw, 'strftime') else str(created_raw))
             ts_item = self._make_item(created, center=True)
             ts_item.setForeground(QColor(SUBTEXT))
             self.product_table.setItem(row, 7, ts_item)
 
     def display_defective_products(self, products: List[Dict]):
-        """Cache full defect list then render (allows search to re-filter)."""
         self._current_mode = "defect"
         self._all_defects = list(products)
-        # Re-apply any active search query immediately
         q = self.search_input.text().strip().lower()
         filtered = (
             [p for p in products
@@ -470,30 +429,43 @@ class ProductDetailsView(QWidget):
         self._render_defective(filtered)
 
     def _render_defective(self, products: List[Dict]):
-        """Render a (possibly filtered) defective list into the table."""
+        """
+        Renders the defective products table.
+        Columns: Defective ID | Product Name | Brand | Model | Defective Qty | Defect Reason
+        Indices:      0              1            2       3          4                5
+        Bug fix: original code wrote defect_reason to column index 5 twice
+        (once as qty_item at col 5, then overwrote it with reason_item also at col 5).
+        Fixed by correctly assigning qty to col 4 and reason to col 5.
+        """
         self.product_table.setColumnCount(6)
         self.product_table.setHorizontalHeaderLabels(
-            ["Defective ID", "Product Name", "Brand", "Model", "Defective Qty", "Defect Reason"])
-        self.product_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.product_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+            ["Defective ID", "Product Name", "Brand", "Model",
+             "Defective Qty", "Defect Reason"])
+        self.product_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
+        self.product_table.horizontalHeader().setSectionResizeMode(
+            5, QHeaderView.ResizeMode.ResizeToContents)
         self.product_table.setRowCount(len(products))
+
         for row, p in enumerate(products):
             self.product_table.setRowHeight(row, 42)
             self.product_table.setItem(row, 0, self._make_item(str(p['defect_id']), center=True))
             self.product_table.setItem(row, 1, self._make_item(p['product_name']))
-            cat = p.get('category', '') or '—'
-            self.product_table.setItem(row, 2, self._make_item(cat))
-            self.product_table.setItem(row, 3, self._make_item(p.get('brand', '')))
-            self.product_table.setItem(row, 4, self._make_item(p.get('model', '')))
+            self.product_table.setItem(row, 2, self._make_item(p.get('brand', '')))
+            self.product_table.setItem(row, 3, self._make_item(p.get('model', '')))
+
+            # Column 4: Defective Qty
             qty_item = self._make_item(str(p['defective_qty']), center=True)
             qty_item.setForeground(QColor(DANGER))
             qty_item.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-            self.product_table.setItem(row, 5, qty_item)
+            self.product_table.setItem(row, 4, qty_item)
+
+            # Column 5: Defect Reason  ← was wrongly also set to index 5 in original
             reason_item = self._make_item(p.get('defect_reason', 'N/A'))
             reason_item.setForeground(QColor(DANGER))
             self.product_table.setItem(row, 5, reason_item)
 
-    # aliases for controller compatibility
+    # Aliases for controller compatibility
     def load_products(self, products): self.display_products(products)
     def load_defective_table(self, products): self.display_defective_products(products)
 
@@ -510,12 +482,16 @@ class ProductDetailsView(QWidget):
         if row >= 0:
             item = self.product_table.item(row, 0)
             if item:
-                try: return int(item.text())
-                except ValueError: return None
+                try:
+                    return int(item.text())
+                except ValueError:
+                    return None
         return None
 
 
 # ── ADD PRODUCT DIALOG ────────────────────────────────────────────────────────
+# Uses QWidget (NOT QDialog) to avoid 0xC0000409 heap corruption with Matplotlib.
+# Uses show() + signals instead of exec() + return value.
 class AddProductDialog(QWidget):
     product_name_changed = pyqtSignal(str)
     confirmed            = pyqtSignal(dict)
@@ -530,12 +506,22 @@ class AddProductDialog(QWidget):
             QWidget {{ background-color: {WHITE}; }}
             QLabel {{ color: {TEXT}; font-weight: bold; margin-bottom: 2px; border: none; }}
             QLabel#Header {{ color: {PRIMARY}; font-size: 18px; margin-bottom: 10px; }}
-            QLineEdit, QSpinBox, QTextEdit, QComboBox {{
+            QLineEdit, QSpinBox, QTextEdit {{
                 border: 1px solid {BORDER}; border-radius: 6px;
                 padding: 7px; color: {TEXT}; background-color: {WHITE};
             }}
-            QPushButton {{ border-radius: 6px; padding: 7px 18px; font-weight: bold;
-                           color: white; }}
+            QComboBox {{
+                border: 1px solid {BORDER}; border-radius: 6px;
+                padding: 7px; color: {TEXT}; background-color: {WHITE};
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: {WHITE};
+                color: {TEXT};
+                selection-background-color: #d0eaf8;
+                selection-color: {TEXT};
+                border: 1px solid {BORDER};
+                outline: none;
+            }}
         """)
         self._init_ui()
 
@@ -560,41 +546,24 @@ class AddProductDialog(QWidget):
         self.desc_input.setMaximumHeight(65)
         self.stock_spin  = QSpinBox(); self.stock_spin.setRange(0, 10000)
 
-        # ── Category row: dropdown + "+ New" button + hidden custom input ──────
+        # Category dropdown + "+ New" inline
         self.category_input = QComboBox()
         self.category_input.setMaxVisibleItems(8)
-        self.category_input.setStyleSheet(f"""
-            QComboBox {{
-                border: 1px solid {BORDER}; border-radius: 6px;
-                padding: 7px; color: {TEXT}; background-color: {WHITE};
-                font-size: 13px;
-            }}
-            QComboBox:focus {{ border-color: {PRIMARY}; }}
-            QComboBox QAbstractItemView {{
-                background-color: {WHITE}; color: {TEXT};
-                selection-background-color: #d0eaf8;
-                border: 1px solid {BORDER};
-                outline: none;
-            }}
-        """)
+        self.category_input.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.category_input.addItem("— Select Category —")
         for _cat in ["Processors (CPU)", "Graphics Cards (GPU)", "Motherboards",
                      "RAM", "Storage", "Cooling", "Cases", "Power Supply",
-                     "Keyboards", "Mice", "Monitors"]:
+                     "Keyboards", "Mouse", "Monitors"]:
             self.category_input.addItem(_cat)
 
         self._btn_new_cat = QPushButton("+ New")
-        self._btn_new_cat.setFixedHeight(34)
-        self._btn_new_cat.setFixedWidth(64)
+        self._btn_new_cat.setFixedSize(80, 34)
         self._btn_new_cat.setCursor(Qt.CursorShape.PointingHandCursor)
         self._btn_new_cat.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent; color: {PRIMARY};
+            QPushButton {{ background-color: transparent; color: {PRIMARY};
                 border: 1px solid {PRIMARY}; border-radius: 6px;
-                font-size: 12px; font-weight: bold; padding: 2px 6px;
-            }}
-            QPushButton:hover {{ background-color: #e8f4fb; }}
-        """)
+                font-size: 12px; font-weight: bold; }}
+            QPushButton:hover {{ background-color: #e8f4fb; }}""")
 
         self._custom_cat_input = QLineEdit()
         self._custom_cat_input.setPlaceholderText("Type new category…")
@@ -602,32 +571,23 @@ class AddProductDialog(QWidget):
         self._custom_cat_input.hide()
 
         self._btn_confirm_cat = QPushButton("✓")
+        self._btn_confirm_cat.setObjectName("btn_confirm_cat")
         self._btn_confirm_cat.setFixedSize(34, 34)
         self._btn_confirm_cat.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_confirm_cat.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {PRIMARY}; color: white !important;
-                border-radius: 6px; font-size: 16px; font-weight: bold; border: none;
-                padding: 0px;
-            }}
-            QPushButton:hover {{ background-color: #005f8a; }}
-        """)
+        self._btn_confirm_cat.setStyleSheet(
+            f"background-color: {PRIMARY}; color: white; border-radius: 6px; border: none;"
+            " font-size: 18px; font-weight: bold; padding: 0px;")
         self._btn_confirm_cat.hide()
 
         self._btn_cancel_cat = QPushButton("✕")
+        self._btn_cancel_cat.setObjectName("btn_cancel_cat")
         self._btn_cancel_cat.setFixedSize(34, 34)
         self._btn_cancel_cat.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_cancel_cat.setStyleSheet("""
-            QPushButton {
-                background-color: #999; color: white;
-                border-radius: 6px; font-size: 14px; font-weight: bold; border: none;
-                padding: 0px;
-            }
-            QPushButton:hover { background-color: #777; }
-        """)
+        self._btn_cancel_cat.setStyleSheet(
+            "background-color: #D32F2F; color: white; border-radius: 6px; border: none;"
+            " font-size: 16px; font-weight: bold; padding: 0px;")
         self._btn_cancel_cat.hide()
 
-        # Assemble the category row widget
         cat_row_widget = QWidget()
         cat_row_widget.setStyleSheet("border: none; background: transparent;")
         cat_row = QHBoxLayout(cat_row_widget)
@@ -639,7 +599,6 @@ class AddProductDialog(QWidget):
         cat_row.addWidget(self._btn_confirm_cat)
         cat_row.addWidget(self._btn_cancel_cat)
 
-        # Wire up new-category flow
         self._btn_new_cat.clicked.connect(self._show_new_category_input)
         self._btn_confirm_cat.clicked.connect(self._confirm_new_category)
         self._btn_cancel_cat.clicked.connect(self._cancel_new_category)
@@ -653,8 +612,9 @@ class AddProductDialog(QWidget):
         form.addRow("Initial Stock:", self.stock_spin)
         layout.addLayout(form)
 
-        # Auto-detect category as user types product name
-        self.name_input.textChanged.connect(self._auto_detect_category)
+        # Emit signal so Controller can auto-detect category (MVC-compliant)
+        self.name_input.textChanged.connect(
+            lambda text: self.product_name_changed.emit(text))
 
         layout.addStretch()
 
@@ -662,82 +622,20 @@ class AddProductDialog(QWidget):
         btn_row.setSpacing(10)
         cancel = QPushButton("Cancel")
         cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel.setStyleSheet("background-color: #ccc; color: #333;")
+        cancel.setFixedHeight(38)
+        cancel.setStyleSheet("background-color: #cccccc; color: #333333; border-radius: 6px; font-weight: bold; border: none; padding: 7px 18px;")
         cancel.clicked.connect(self._on_cancel)
         save = QPushButton("Add Product")
         save.setCursor(Qt.CursorShape.PointingHandCursor)
-        save.setStyleSheet(f"background-color: {TEAL}; color: white;")
+        save.setFixedHeight(38)
+        save.setStyleSheet(f"background-color: {TEAL}; color: white; border-radius: 6px; font-weight: bold; border: none; padding: 7px 18px;")
         save.clicked.connect(self._on_confirm)
         btn_row.addWidget(cancel)
         btn_row.addWidget(save)
         layout.addLayout(btn_row)
 
-    def _show_new_category_input(self):
-        """Switch from dropdown+button to text input mode."""
-        self.category_input.hide()
-        self._btn_new_cat.hide()
-        self._custom_cat_input.clear()
-        self._custom_cat_input.show()
-        self._btn_confirm_cat.show()
-        self._btn_cancel_cat.show()
-        self._custom_cat_input.setFocus()
-
-    def _confirm_new_category(self):
-        """Add the typed category to the dropdown and select it."""
-        new_cat = self._custom_cat_input.text().strip()
-        if new_cat:
-            # Add only if not already present
-            existing = [self.category_input.itemText(i)
-                        for i in range(self.category_input.count())]
-            if new_cat not in existing:
-                # Append at end of list
-                self.category_input.addItem(new_cat)
-            idx = self.category_input.findText(new_cat)
-            if idx >= 0:
-                self.category_input.setCurrentIndex(idx)
-        self._cancel_new_category()
-
-    def _cancel_new_category(self):
-        """Return to dropdown mode without adding anything."""
-        self._custom_cat_input.hide()
-        self._btn_confirm_cat.hide()
-        self._btn_cancel_cat.hide()
-        self.category_input.show()
-        self._btn_new_cat.show()
-
-    def _auto_detect_category(self, text: str):
-        """Auto-select the most likely category as the user types the product name."""
-        n = text.lower()
-        if any(k in n for k in ["processor", "ryzen", "core i", "core ultra"]):
-            cat = "Processors (CPU)"
-        elif any(k in n for k in ["graphics", "rtx", " rx ", "radeon", "gpu"]):
-            cat = "Graphics Cards (GPU)"
-        elif "motherboard" in n:
-            cat = "Motherboards"
-        elif any(k in n for k in ["ram", "ddr"]):
-            cat = "RAM"
-        elif any(k in n for k in ["ssd", "hdd", "nvme"]):
-            cat = "Storage"
-        elif any(k in n for k in ["cooler", "cooling", "aio", "fan"]):
-            cat = "Cooling"
-        elif any(k in n for k in ["case", "chassis"]):
-            cat = "Cases"
-        elif any(k in n for k in ["psu", "power supply", "watt"]):
-            cat = "Power Supply"
-        elif "keyboard" in n:
-            cat = "Keyboards"
-        elif "mouse" in n:
-            cat = "Mice"
-        elif any(k in n for k in ["monitor", "display"]):
-            cat = "Monitors"
-        else:
-            return  # don't reset to placeholder if no match
-        idx = self.category_input.findText(cat)
-        if idx >= 0:
-            self.category_input.setCurrentIndex(idx)
-
     def _on_confirm(self):
-        """Emit confirmed signal with form data — avoids QDialog.exec() crash."""
+        """Emit confirmed signal — never calls exec() or accept()."""
         self.confirmed.emit(self.get_data())
         self.close()
 
@@ -745,6 +643,37 @@ class AddProductDialog(QWidget):
         """Emit cancelled signal and close."""
         self.cancelled.emit()
         self.close()
+
+    def _show_new_category_input(self):
+        self.category_input.hide(); self._btn_new_cat.hide()
+        self._custom_cat_input.clear(); self._custom_cat_input.show()
+        self._btn_confirm_cat.show(); self._btn_cancel_cat.show()
+        self._custom_cat_input.setFocus()
+
+    def _confirm_new_category(self):
+        new_cat = self._custom_cat_input.text().strip()
+        target_idx = -1
+        if new_cat:
+            existing = [self.category_input.itemText(i)
+                        for i in range(self.category_input.count())]
+            if new_cat not in existing:
+                self.category_input.addItem(new_cat)
+            target_idx = self.category_input.findText(new_cat)
+        self._cancel_new_category()
+        # Set selection AFTER showing the combo again so Qt renders it correctly
+        if target_idx >= 0:
+            self.category_input.setCurrentIndex(target_idx)
+
+    def _cancel_new_category(self):
+        self._custom_cat_input.hide(); self._btn_confirm_cat.hide()
+        self._btn_cancel_cat.hide(); self.category_input.show()
+        self._btn_new_cat.show()
+
+    def set_suggested_category(self, category: str):
+        """Called by Controller with the auto-detected category."""
+        idx = self.category_input.findText(category)
+        if idx >= 0:
+            self.category_input.setCurrentIndex(idx)
 
     def get_data(self) -> Dict:
         cat = self.category_input.currentText()
@@ -756,7 +685,7 @@ class AddProductDialog(QWidget):
             'brand':          self.brand_input.text().strip(),
             'model':          self.model_input.text().strip(),
             'description':    self.desc_input.toPlainText().strip(),
-            'stock_quantity': self.stock_spin.value()
+            'stock_quantity': self.stock_spin.value(),
         }
 
     def clear_form(self):
@@ -764,14 +693,14 @@ class AddProductDialog(QWidget):
         self.model_input.clear(); self.desc_input.clear()
         self.stock_spin.setValue(0)
         self.category_input.setCurrentIndex(0)
-        self._cancel_new_category()  # ensure dropdown mode on reset
-
+        self._cancel_new_category()
 
 # ── PRODUCT DETAIL WINDOW ─────────────────────────────────────────────────────
 class ProductDetailDialog(QWidget):
     """
-    Detail view for an inventory product — uses QWidget (not QDialog) to avoid
-    the nested-event-loop crash (0xC0000409) with Matplotlib QtAgg on Windows.
+    Detail view for an inventory product.
+    Uses QWidget (not QDialog) to avoid the nested-event-loop crash
+    (0xC0000409) with Matplotlib QtAgg on Windows.
     """
 
     def __init__(self, product: dict, parent=None):
@@ -787,7 +716,6 @@ class ProductDetailDialog(QWidget):
         layout.setContentsMargins(32, 24, 32, 24)
         layout.setSpacing(0)
 
-        # ── Header strip ─────────────────────────────────────────────────────
         header = QFrame()
         header.setStyleSheet(
             f"background-color: {PRIMARY}; border-radius: 8px; border: none;")
@@ -822,7 +750,6 @@ class ProductDetailDialog(QWidget):
         layout.addWidget(header)
         layout.addSpacing(20)
 
-        # ── Fields card ───────────────────────────────────────────────────────
         card = QFrame()
         card.setStyleSheet(
             f"QFrame {{ background-color: #f8f9fa; border-radius: 8px;"
@@ -873,7 +800,6 @@ class ProductDetailDialog(QWidget):
         layout.addWidget(card)
         layout.addStretch()
 
-        # ── Close button ──────────────────────────────────────────────────────
         close_btn = QPushButton("Close")
         close_btn.setFixedHeight(38)
         close_btn.setFixedWidth(120)
@@ -887,5 +813,4 @@ class ProductDetailDialog(QWidget):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         btn_row.addWidget(close_btn)
-        layout.addLayout(btn_row)
         layout.addLayout(btn_row)

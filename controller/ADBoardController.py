@@ -152,7 +152,9 @@ class DashboardController:
         self.view.activity_double_clicked.connect(self.show_activity_details)
 
         self.recent_activities_data = []
-        self.refresh_dashboard()
+        # Defer initial refresh so window is fully shown before Matplotlib draws
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(200, self.refresh_dashboard)
 
     # ── Page registration ─────────────────────────────────────────────────────
 
@@ -179,6 +181,7 @@ class DashboardController:
     # ── Data refresh ──────────────────────────────────────────────────────────
 
     def refresh_dashboard(self):
+        self._dashboard_initialized = True
         print("Refreshing Dashboard Data...")
         data = {
             'total_products':    self.model.get_total_products(),
@@ -197,7 +200,10 @@ class DashboardController:
 
     def handle_dashboard(self):
         self.view.show_dashboard_page()
-        self.refresh_dashboard()
+        # Only refresh when explicitly navigating TO dashboard, not on initial load
+        if hasattr(self, '_dashboard_initialized') and self._dashboard_initialized:
+            self.refresh_dashboard()
+        self._dashboard_initialized = True
 
     def handle_manage_users(self):
         self.view.show_manage_users_page()

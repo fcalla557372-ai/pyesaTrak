@@ -41,7 +41,7 @@ class ProductDetailsModel:
             WHEN LOWER(product_name) LIKE '%keyboard%'
             THEN 'Keyboards'
             WHEN LOWER(product_name) LIKE '%mouse%'
-            THEN 'Mice'
+            THEN 'Mouse'
             WHEN LOWER(product_name) LIKE '%monitor%'
               OR LOWER(product_name) LIKE '%display%'
             THEN 'Monitors'
@@ -72,7 +72,7 @@ class ProductDetailsModel:
         if 'keyboard' in n:
             return 'Keyboards'
         if 'mouse' in n:
-            return 'Mice'
+            return 'Mouse'
         if any(k in n for k in ['monitor', 'display']):
             return 'Monitors'
         return 'Other'
@@ -148,12 +148,12 @@ class ProductDetailsModel:
                         WHEN LOWER(i.product_name) LIKE '%cooler%' OR LOWER(i.product_name) LIKE '%aio%' THEN 'Cooling'
                         WHEN LOWER(i.product_name) LIKE '%case%' THEN 'Cases'
                         WHEN LOWER(i.product_name) LIKE '%keyboard%' THEN 'Keyboards'
-                        WHEN LOWER(i.product_name) LIKE '%mouse%' THEN 'Mice'
+                        WHEN LOWER(i.product_name) LIKE '%mouse%' THEN 'Mouse'
                         WHEN LOWER(i.product_name) LIKE '%monitor%' THEN 'Monitors'
                         ELSE 'Other'
                     END) AS category,
                     d.defective_qty,
-                    CONCAT(d.defect_type, CASE WHEN d.description != '' THEN CONCAT(' - ', d.description) ELSE '' END) AS defect_reason,
+                    CONCAT(d.defect_type, CASE WHEN d.description IS NOT NULL AND d.description != '' THEN CONCAT(' - ', d.description) ELSE '' END) AS defect_reason,
                     d.reported_at
                 FROM defective_items d
                 JOIN inventory i ON d.product_id = i.product_id

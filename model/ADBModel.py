@@ -180,7 +180,7 @@ class DashboardModel:
                         WHEN LOWER(product_name) LIKE '%keyboard%'
                         THEN 'Keyboards'
                         WHEN LOWER(product_name) LIKE '%mouse%'
-                        THEN 'Mice'
+                        THEN 'Mouse'
                         WHEN LOWER(product_name) LIKE '%monitor%'
                           OR LOWER(product_name) LIKE '%display%'
                         THEN 'Monitors'

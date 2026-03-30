@@ -103,7 +103,7 @@ class ReportsPage(QWidget):
         tc.setContentsMargins(0, 0, 0, 0)
 
         self.report_table = QTableWidget()
-        self.report_table.setShowGrid(False)
+        self.report_table.setShowGrid(True)
         self.report_table.setAlternatingRowColors(True)
         self.report_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.report_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -256,8 +256,9 @@ class ReportDetailDialog(QWidget):
 
     def __init__(self, report: dict, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
-        self.setWindowTitle("Report Details")
-        self.setFixedSize(520, 480)
+        rtype_title = str(report.get('report_type', 'Report Details') or 'Report Details')
+        self.setWindowTitle(rtype_title)
+        self.setFixedSize(520, 500)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setStyleSheet(f"background-color: {WHITE};")
         self._build_ui(report)
@@ -275,8 +276,9 @@ class ReportDetailDialog(QWidget):
         hl = QHBoxLayout(header)
         hl.setContentsMargins(20, 0, 20, 0)
 
-        title_lbl = QLabel("Report Details")
-        title_lbl.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        report_type_display = str(r.get('report_type', 'Report Details') or 'Report Details')
+        title_lbl = QLabel(report_type_display)
+        title_lbl.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
         title_lbl.setStyleSheet("color: white; border: none;")
         hl.addWidget(title_lbl)
         hl.addStretch()
@@ -303,21 +305,32 @@ class ReportDetailDialog(QWidget):
         fl.setContentsMargins(20, 12, 20, 12)
         fl.setSpacing(0)
 
-        start  = str(r.get('start_date',  '') or '')
-        end    = str(r.get('end_date',    '') or '')
-        period = f"{start} to {end}" if (start and end) else "—"
+        start      = str(r.get('start_date',  '') or '')
+        end        = str(r.get('end_date',    '') or '')
+        rtype      = str(r.get('report_type', '') or '')
+        period     = f"{start} to {end}" if (start and end) else "—"
+
+        # Type-specific description of what the report contains
+        _type_descriptions = {
+            "Inventory Status":      "Snapshot of current stock levels across all product categories — product ID, name, brand, model, quantity, status, and last updated.",
+            "Stock Movement":        f"All Stock In, Stock Out, and Defect transactions from {start} to {end} — transaction date, type, product, brand, quantity, remarks, and processed by.",
+            "Defects Report":        f"Defect incidents logged from {start} to {end} — transaction date, product name, brand, defective quantity, remarks, and reported by.",
+            "Low Stock Report":      "Snapshot of all products currently at or below the low stock threshold (≤10 units) — product ID, name, brand, model, category, quantity, status.",
+            "Out of Stock Report":   "Snapshot of all products currently at zero stock — product ID, name, brand, model, category, and last updated date.",
+            "Defective Stock Report": f"Defective item ledger from {start} to {end} — Defect ID, reported date, product ID, name, brand, category, defective quantity, defect type, description, and reported by.",
+            "User Activity":         f"Login activity log from {start} to {end} — login ID, user name, role, and login timestamp.",
+        }
+        report_contents = _type_descriptions.get(rtype, f"Report data for {rtype}.")
 
         rows = [
-            ("Report ID",    str(r.get('report_id',     '') or '—')),
-            ("Report Name",  str(r.get('report_name',   '') or '—')),
-            ("Report Type",  str(r.get('report_type',   '') or '—')),
-            ("Period",       period),
-            ("Requested By", str(r.get('requested_by',  '') or '—')),
-            ("Processed By", str(r.get('processed_by',  '') or '—')),
-            ("Validated By", str(r.get('validated_by',  '') or '—')),
-            ("Validated At", str(r.get('validated_at',  '') or '—')),
-            ("Generated On", str(r.get('created_at',    '') or '—')),
-            ("Status",       status),
+            ("Report ID",       str(r.get('report_id',    '') or '—')),
+            ("Report Type",     rtype or '—'),
+            ("Period",          period),
+            ("Report Contents", report_contents),
+            ("Generated On",    str(r.get('created_at',   '') or '—')),
+            ("Requested By",    str(r.get('requested_by', '') or '—')),
+            ("Processed By",    str(r.get('processed_by', '') or '—')),
+            ("Status",          status),
         ]
         for i, (lbl_txt, val_txt) in enumerate(rows):
             row_w = QWidget()

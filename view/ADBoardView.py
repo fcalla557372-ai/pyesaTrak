@@ -432,7 +432,7 @@ class DashboardView(QWidget):
             accent=self.COLORS['success'])
 
         self.card_out, self.lbl_out = self.create_borderless_kpi(
-            'Weekly Outflow', '-0', 'Total stock dispatched',
+            'Out of Stock Products', '0', 'Products with zero stock',
             self.COLORS['danger'], clickable=True,
             on_click=lambda: self.kpi_out_of_stock_clicked.emit(),
             accent=self.COLORS['danger'])
@@ -677,9 +677,8 @@ class DashboardView(QWidget):
 
         weekly = data.get('weekly_flow', [])
         w_in  = sum(int(r.get('stock_in',  0) or 0) for r in weekly)
-        w_out = sum(int(r.get('stock_out', 0) or 0) for r in weekly)
         self.lbl_inflow.setText(f'+{w_in}')
-        self.lbl_out.setText(f'-{w_out}')
+        self.lbl_out.setText(str(data.get('out_of_stock_count', 0)))
         self.lbl_low.setText(str(data.get('low_stock_count', 0)))
         self.lbl_def.setText(str(data.get('defective_count', 0)))
 

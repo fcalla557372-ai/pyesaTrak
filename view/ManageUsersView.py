@@ -81,6 +81,8 @@ class ManageUsersView(QWidget):
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(["ID", "Name", "Username", "Role", "Status", "Actions"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(5, 180)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -103,7 +105,7 @@ class ManageUsersView(QWidget):
         self.table.clearContents()
         self.table.setRowCount(len(users))
         for row_idx, user in enumerate(users):
-            self.table.setRowHeight(row_idx, 44)
+            self.table.setRowHeight(row_idx, 52)
             self.table.setItem(row_idx, 0, self._item(str(user['user_id']), center=True))
             full_name = f"{user.get('userFname', '')} {user.get('userLname', '')}".strip()
             self.table.setItem(row_idx, 1, self._item(full_name))
@@ -116,22 +118,22 @@ class ManageUsersView(QWidget):
 
             container = QWidget()
             h = QHBoxLayout(container)
-            h.setContentsMargins(4, 4, 4, 4)
-            h.setSpacing(6)
+            h.setContentsMargins(8, 6, 8, 6)
+            h.setSpacing(8)
             h.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
             btn_edit = QPushButton("Edit")
             btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_edit.setFixedSize(58, 28)
-            btn_edit.setStyleSheet(f"QPushButton {{ background-color: {PRIMARY}; color: white; border-radius: 4px; font-weight: bold; font-size: 11px; border: none; }} QPushButton:hover {{ background-color: #005f8a; }}")
+            btn_edit.setFixedSize(70, 32)
+            btn_edit.setStyleSheet(f"QPushButton {{ background-color: {PRIMARY}; color: white; border-radius: 6px; font-weight: bold; font-size: 12px; border: none; }} QPushButton:hover {{ background-color: #005f8a; }}")
             btn_edit.clicked.connect(lambda checked, u=user['user_id']: self.edit_user_clicked.emit(u))
 
             is_active = user['status'] == 'Active'
             btn_archive = QPushButton("Archive" if is_active else "Unarchive")
             btn_archive.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_archive.setFixedSize(76, 28)
+            btn_archive.setFixedSize(90, 32)
             arc_color = ARCHIVE if is_active else SUCCESS
-            btn_archive.setStyleSheet(f"QPushButton {{ background-color: {arc_color}; color: white; border-radius: 4px; font-weight: bold; font-size: 11px; border: none; }} QPushButton:hover {{ background-color: {'#c46000' if is_active else '#1e8449'}; }}")
+            btn_archive.setStyleSheet(f"QPushButton {{ background-color: {arc_color}; color: white; border-radius: 6px; font-weight: bold; font-size: 12px; border: none; }} QPushButton:hover {{ background-color: {'#c46000' if is_active else '#1e8449'}; }}")
             btn_archive.clicked.connect(lambda checked, u=user['user_id']: self.archive_user_clicked.emit(u))
 
             h.addWidget(btn_edit)

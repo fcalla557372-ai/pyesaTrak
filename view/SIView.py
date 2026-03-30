@@ -1,4 +1,11 @@
-# SIView.py — Staff Inventory View (No dashboard dependency)
+# SIView.py — Staff Inventory View
+# ============================================================
+# VIEW LAYER — Responsibilities:
+#   - All UI widgets and layouts
+#   - Emit signals for user actions (no logic inside)
+#   - StaffMainWindow and CustomMessageBox live HERE (moved from SIController)
+#   - NO database queries, NO business logic, NO validation
+# ============================================================
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                               QPushButton, QTableWidget, QTableWidgetItem,
                               QHeaderView, QAbstractItemView, QFrame, QDialog,
@@ -30,14 +37,14 @@ class ToggleTableWidget(QTableWidget):
 
 
 class InventoryView(QWidget):
-    stock_in_clicked        = pyqtSignal()
-    stock_out_clicked       = pyqtSignal()
-    defect_clicked          = pyqtSignal()
-    filter_all_clicked      = pyqtSignal()
+    stock_in_clicked            = pyqtSignal()
+    stock_out_clicked           = pyqtSignal()
+    defect_clicked              = pyqtSignal()
+    filter_all_clicked          = pyqtSignal()
     filter_low_stock_clicked    = pyqtSignal()
     filter_out_of_stock_clicked = pyqtSignal()
     filter_defective_clicked    = pyqtSignal()
-    product_selected        = pyqtSignal(int)   # emits product_id on row click
+    product_selected            = pyqtSignal(int)
 
     def __init__(self, color_scheme=None):
         super().__init__()
@@ -57,8 +64,6 @@ class InventoryView(QWidget):
     def _on_category_changed(self, text: str):
         self._active_category = text if (text and text != "All Categories") else ""
         self._active_brand = ""
-
-        # Repopulate brand dropdown to only brands in selected category
         self.brand_combo.blockSignals(True)
         self.brand_combo.clear()
         self.brand_combo.addItem("All Brands")
@@ -72,11 +77,9 @@ class InventoryView(QWidget):
         for b in brands:
             self.brand_combo.addItem(b)
         self.brand_combo.blockSignals(False)
-
         self._apply_local_filters()
 
     def _apply_local_filters(self):
-        """Apply active category + brand + search text to the cached product list."""
         pool = self._all_products
         if self._active_category:
             pool = [p for p in pool if p.get("category") == self._active_category]
@@ -106,7 +109,6 @@ class InventoryView(QWidget):
             self.category_combo.addItem(c)
         self.category_combo.blockSignals(False)
 
-    # ── Filter dropdown helper ────────────────────────────────────────────────
     _FILTER_OPTIONS = [
         ("All Items",    "All"),
         ("Low Stock",    "Low"),
@@ -115,7 +117,6 @@ class InventoryView(QWidget):
     ]
 
     def _on_filter_changed(self, index):
-        """Called when the filter dropdown selection changes."""
         key = self._FILTER_OPTIONS[index][1]
         self._active_filter = key
         self.search_input.blockSignals(True)
@@ -130,16 +131,13 @@ class InventoryView(QWidget):
         sig[key].emit()
 
     def set_active_tab(self, tab_key):
-        """Controller calls this to sync the dropdown after a programmatic filter."""
         idx_map = {"All": 0, "Low": 1, "Out": 2, "Defect": 3}
         self._active_filter = tab_key
         self.filter_combo.blockSignals(True)
         self.filter_combo.setCurrentIndex(idx_map.get(tab_key, 0))
         self.filter_combo.blockSignals(False)
 
-    # ── UI build ──────────────────────────────────────────────────────────────
     def _lbl(self, text, style):
-        """Create a styled QLabel inline."""
         l = QLabel(text)
         l.setStyleSheet(style)
         return l
@@ -159,13 +157,11 @@ class InventoryView(QWidget):
         cl.setContentsMargins(20, 16, 20, 16)
         cl.setSpacing(10)
 
-        # Title
         title = QLabel("Inventory (Staff)")
         title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {TEXT}; border: none;")
         cl.addWidget(title)
 
-        # ── Row 1: Search + Filter + Brand + Category ────────────────────────
         filter_row = QHBoxLayout()
         filter_row.setSpacing(8)
 
@@ -232,7 +228,6 @@ class InventoryView(QWidget):
         filter_row.addStretch()
         cl.addLayout(filter_row)
 
-        # ── Row 2: Action buttons ────────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
 
@@ -265,7 +260,6 @@ class InventoryView(QWidget):
         self.btn_def.clicked.connect(self.defect_clicked.emit)
         cl.addLayout(btn_row)
 
-        # ── Table ─────────────────────────────────────────────────────────────
         self.product_table = ToggleTableWidget()
         self.product_table.verticalHeader().setVisible(False)
         self.product_table.setSelectionBehavior(
@@ -274,16 +268,15 @@ class InventoryView(QWidget):
             QAbstractItemView.SelectionMode.SingleSelection)
         self.product_table.setEditTriggers(
             QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.product_table.setShowGrid(False)
+        self.product_table.setShowGrid(True)
         self.product_table.setFrameShape(QFrame.Shape.NoFrame)
-        # NoFocus would block the :selected visual state — use StrongFocus instead
         self.product_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.product_table.setAlternatingRowColors(True)
         self.product_table.cellClicked.connect(self._on_row_clicked)
         self.product_table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {WHITE}; border: none; color: {TEXT};
-                font-size: 13px; outline: 0;
+                font-size: 13px; outline: 0; gridline-color: #E0E0E0;
             }}
             QHeaderView::section {{
                 background-color: {TEXT}; color: white;
@@ -305,11 +298,9 @@ class InventoryView(QWidget):
         cl.addWidget(self.product_table)
         main_layout.addWidget(card)
 
-    # ── Row selection ─────────────────────────────────────────────────────────
     def _on_row_clicked(self, row, col):
-        """Emit the product_id of the clicked row (normal mode only)."""
         if self._current_mode == "defect":
-            return  # defect rows don't map to a stock-actionable product_id
+            return
         item = self.product_table.item(row, 0)
         if item:
             try:
@@ -318,7 +309,6 @@ class InventoryView(QWidget):
                 pass
 
     def get_selected_product_id(self):
-        """Returns the product_id of the currently selected row, or None."""
         r = self.product_table.currentRow()
         if r >= 0 and self._current_mode == "normal":
             item = self.product_table.item(r, 0)
@@ -329,7 +319,6 @@ class InventoryView(QWidget):
                     pass
         return None
 
-    # ── Search ────────────────────────────────────────────────────────────────
     def _on_search(self, text: str):
         q = text.strip().lower()
         if self._current_mode == "defect":
@@ -341,7 +330,6 @@ class InventoryView(QWidget):
             ]
             self._render_defective(pool)
         else:
-            # Respect active category + brand alongside text search
             pool = self._all_products
             if self._active_category:
                 pool = [p for p in pool if p.get("category") == self._active_category]
@@ -354,12 +342,9 @@ class InventoryView(QWidget):
                         or q in p.get("model", "").lower()]
             self._render_products(pool)
 
-    # ── Data display ──────────────────────────────────────────────────────────
     def load_table(self, products):
-        """Called by controller — replaces full product cache and re-applies filters."""
         self._current_mode = "normal"
         self._all_products = list(products)
-        # Re-apply any active category/brand/search so view stays consistent
         pool = self._all_products
         if self._active_category:
             pool = [p for p in pool if p.get("category") == self._active_category]
@@ -409,7 +394,6 @@ class InventoryView(QWidget):
             self.product_table.setItem(row, 5, st_item)
 
     def load_defective_table(self, products):
-        """Called by controller for defective view."""
         self._current_mode = "defect"
         self._all_defects = list(products)
         self._render_defective(products)
@@ -446,7 +430,6 @@ class InventoryView(QWidget):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         return item
 
-    # Keep old method name for compatibility
     def make_item(self, text, center=False):
         return self._item(text, center)
 
@@ -454,18 +437,16 @@ class InventoryView(QWidget):
         r = self.product_table.currentRow()
         if r >= 0:
             return {
-                'product_id':    int(self.product_table.item(r, 0).text()),
-                'product_name':  self.product_table.item(r, 1).text(),
-                'brand':         self.product_table.item(r, 2).text(),
-                'model':         self.product_table.item(r, 3).text(),
+                'product_id':     int(self.product_table.item(r, 0).text()),
+                'product_name':   self.product_table.item(r, 1).text(),
+                'brand':          self.product_table.item(r, 2).text(),
+                'model':          self.product_table.item(r, 3).text(),
                 'stock_quantity': int(self.product_table.item(r, 4).text())
             }
         return None
 
 
 # ── TRANSACTION DIALOGS ───────────────────────────────────────────────────────
-# These use QDialog.exec() which is safe for Staff because StaffMainWindow
-# has no Matplotlib — no nested event loop conflict.
 
 _COMBO_STYLE = (
     f"QComboBox {{ border: 1px solid {BORDER}; border-radius: 8px;"
@@ -707,10 +688,12 @@ class DefectDialog(BaseTransactionDialog):
             self.desc.toPlainText().strip()
         )
 
-# ── SIGN-OUT DIALOG ───────────────────────────────────────────────────────────
-# Moved from SIController.py — UI construction belongs in the View layer.
 
-from PyQt6.QtWidgets import QDialog
+# ── STAFF MAIN WINDOW ─────────────────────────────────────────────────────────
+# Moved here from SIController — this is a View-layer responsibility.
+# It is a UI shell: sidebar, layout, sign-out dialog.
+# Business decisions (which controller to launch, sign-out logic) are handled
+# by the controller methods it calls.
 
 class CustomMessageBox(QDialog):
     """Frameless sign-out confirmation dialog."""
@@ -795,15 +778,13 @@ class CustomMessageBox(QDialog):
         layout.addWidget(body)
 
 
-# ── STAFF MAIN WINDOW ─────────────────────────────────────────────────────────
-# Moved from SIController.py — window layout belongs in the View layer.
-
 class StaffMainWindow(QWidget):
     """
-    Staff-facing main window.
-    Shows the inventory page directly — no dashboard, no Matplotlib dependency.
+    Staff-facing main window — View layer.
+    Builds the sidebar + inventory page shell.
+    Sign-out logic calls the controller; it does NOT make decisions here.
     """
-    sign_out_requested = pyqtSignal()
+    sign_out_requested = pyqtSignal()   # Controller connects to this
 
     def __init__(self, user_data=None):
         super().__init__()
@@ -818,7 +799,7 @@ class StaffMainWindow(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Sidebar
+        # ── Sidebar ───────────────────────────────────────────────────────────
         sidebar = QFrame()
         sidebar.setFixedWidth(240)
         sidebar.setStyleSheet("background-color: #1A1A1A; border: none;")
@@ -828,7 +809,8 @@ class StaffMainWindow(QWidget):
 
         app_title = QLabel("PyesaTrak")
         app_title.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
-        app_title.setStyleSheet("color: white; margin-bottom: 30px; border: none;")
+        app_title.setStyleSheet(
+            "color: white; margin-bottom: 30px; border: none;")
         app_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sl.addWidget(app_title)
 
@@ -863,22 +845,23 @@ class StaffMainWindow(QWidget):
                           border: none; border-radius: 6px; }
             QPushButton:hover { background-color: #D32F2F; }
         """)
+        # Emit signal — controller handles the actual sign-out logic
         sign_out.clicked.connect(self._on_sign_out_clicked)
         sl.addWidget(sign_out)
         root.addWidget(sidebar)
 
-        # Content area — inventory widget is inserted by SIController after init
+        # ── Content area ──────────────────────────────────────────────────────
         content = QWidget()
         content.setStyleSheet("background-color: #F5F5F5;")
-        self.content_layout = QVBoxLayout(content)
-        self.content_layout.setContentsMargins(30, 30, 30, 30)
+        cl = QVBoxLayout(content)
+        cl.setContentsMargins(30, 30, 30, 30)
 
         self.inventory_view = InventoryView()
-        self.content_layout.addWidget(self.inventory_view)
+        cl.addWidget(self.inventory_view)
         root.addWidget(content)
 
     def _on_sign_out_clicked(self):
-        """Show confirmation dialog; emit signal if confirmed so Controller can act."""
+        """Show confirmation dialog; emit signal only if user confirms."""
         dlg = CustomMessageBox(self)
         if dlg.exec():
             self.sign_out_requested.emit()
