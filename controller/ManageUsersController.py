@@ -1,90 +1,124 @@
-# ManageUsersController.py — Archive instead of Delete
-from ManageUsersModel import ManageUsersModel
-from ManageUsersView import ManageUsersView, UserFormDialog
-from PyQt6.QtWidgets import QMessageBox
+# controller/ManageUsersController.py
+# MVC LAYER: CONTROLLER
+# Responsibilities: handle user actions, call Model, instruct View.
+# Must NOT import PyQt6 widgets directly or call QMessageBox.
+
+from model.ManageUsersModel import ManageUsersModel          # ← fixed package import
+from view.ManageUsersView import ManageUsersView, UserFormDialog  # ← fixed package import
 
 
 class ManageUsersController:
+    """
+    Mediates between ManageUsersModel and ManageUsersView.
+    - Calls model CRUD methods in response to view signals.
+    - Passes data or status messages to the view for display.
+    - No raw SQL, no PyQt widget construction, no QMessageBox here.
+    """
+
     def __init__(self, user_data=None):
-        self.model = ManageUsersModel()
-        self.view = ManageUsersView()
+        self.model     = ManageUsersModel()
+        self.view      = ManageUsersView()
         self.user_data = user_data
 
+        # Filter signals → refresh table
         self.view.search_input.textChanged.connect(self.refresh_data)
         self.view.role_combo.currentTextChanged.connect(self.refresh_data)
         self.view.status_combo.currentTextChanged.connect(self.refresh_data)
 
+        # Action signals → handlers
         self.view.add_user_clicked.connect(self.handle_add_user)
         self.view.edit_user_clicked.connect(self.handle_edit_user)
         self.view.archive_user_clicked.connect(self.handle_archive_user)
-        # delete_user_clicked kept for compat — wire to archive too
-        self.view.delete_user_clicked.connect(self.handle_archive_user)
+        self.view.delete_user_clicked.connect(self.handle_archive_user)   # alias
+
+    # ── READ ──────────────────────────────────────────────────────────────────
 
     def refresh_data(self):
         search = self.view.search_input.text()
         role   = self.view.role_combo.currentText()
         status = self.view.status_combo.currentText()
-        if "All" in role:   role   = "All"
-        if "All" in status: status = "All"
-        users = self.model.get_users(role, status, search)
+        role   = "All" if "All" in role   else role
+        status = "All" if "All" in status else status
+        users  = self.model.get_users(role, status, search)
         self.view.load_data(users)
 
+    # ── CREATE ────────────────────────────────────────────────────────────────
+
     def handle_add_user(self):
-        dialog = UserFormDialog(self.view)        # add mode — role locked to Staff
-        if dialog.exec():
-            data = dialog.get_data()
-            if not data['username'] or not data['password']:
-                QMessageBox.warning(self.view, "Error", "Username and Password are required!")
-                return
-            # Enforce: only Staff can be added through this dialog
-            data['role'] = 'Staff'
-            if self.model.add_user(data):
-                QMessageBox.information(self.view, "Success", "User added successfully!")
-                self.refresh_data()
-            else:
-                QMessageBox.critical(self.view, "Error", "Failed to add user. Username might already be taken.")
+        dialog = UserFormDialog(self.view)   # add mode — role locked to Staff in dialog
+        if not dialog.exec():
+            return
 
-    def handle_edit_user(self, uid):
+        data = dialog.get_data()
+
+        if not data['username'] or not data['password']:
+            self.view.show_message("Error", "Username and Password are required!", "warning")
+            return
+
+        # Business rule: only Staff accounts may be created through this UI
+        data['role'] = 'Staff'
+
+        if self.model.add_user(data):
+            self.view.show_message("Success", "User added successfully!", "info")
+            self.refresh_data()
+        else:
+            self.view.show_message(
+                "Error",
+                "Failed to add user. Username might already be taken.",
+                "critical")
+
+    # ── UPDATE ────────────────────────────────────────────────────────────────
+
+    def handle_edit_user(self, uid: int):
         user = self.model.get_user_by_id(uid)
         if not user:
-            QMessageBox.warning(self.view, "Error", "User not found.")
+            self.view.show_message("Error", "User not found.", "warning")
             return
+
         dialog = UserFormDialog(self.view, user)   # edit mode — role is read-only label
-        if dialog.exec():
-            data = dialog.get_data()
-            # Never allow role change via edit — preserve original role
-            data['role'] = user.get('role', 'Staff')
-            if not data['password']:
-                del data['password']
-            if self.model.update_user(uid, data):
-                QMessageBox.information(self.view, "Success", "User updated successfully!")
-                self.refresh_data()
-            else:
-                QMessageBox.critical(self.view, "Error", "Failed to update user.")
+        if not dialog.exec():
+            return
 
-    def handle_archive_user(self, uid):
-        """Toggle user status between Active ↔ Inactive (archive/unarchive)."""
+        data = dialog.get_data()
+        data['role'] = user.get('role', 'Staff')   # role is immutable after creation
+
+        if not data.get('password'):
+            data.pop('password', None)   # don't overwrite if left blank
+
+        if self.model.update_user(uid, data):
+            self.view.show_message("Success", "User updated successfully!", "info")
+            self.refresh_data()
+        else:
+            self.view.show_message("Error", "Failed to update user.", "critical")
+
+    # ── ARCHIVE / UNARCHIVE ───────────────────────────────────────────────────
+
+    def handle_archive_user(self, uid: int):
+        """Toggle Active ↔ Inactive. View handles the confirmation dialog."""
         if self.user_data and uid == self.user_data.get('user_id'):
-            QMessageBox.warning(self.view, "Error", "You cannot archive your own account!")
+            self.view.show_message(
+                "Error", "You cannot archive your own account!", "warning")
             return
 
         user = self.model.get_user_by_id(uid)
         if not user:
-            QMessageBox.warning(self.view, "Error", "User not found.")
+            self.view.show_message("Error", "User not found.", "warning")
             return
 
-        is_active = user.get('status') == 'Active'
-        action    = "archive" if is_active else "unarchive"
+        is_active  = user.get('status') == 'Active'
+        action     = "archive" if is_active else "unarchive"
         new_status = "Inactive" if is_active else "Active"
 
-        reply = QMessageBox.question(
-            self.view, f"Confirm {action.capitalize()}",
-            f"Are you sure you want to {action} this user?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            if self.model.update_user(uid, {'status': new_status}):
-                QMessageBox.information(self.view, "Success", f"User {action}d successfully.")
-                self.refresh_data()
-            else:
-                QMessageBox.critical(self.view, "Error", f"Failed to {action} user.")
+        # View owns the confirmation dialog — controller only reads the result
+        confirmed = self.view.confirm_action(
+            f"Confirm {action.capitalize()}",
+            f"Are you sure you want to {action} this user?")
+
+        if not confirmed:
+            return
+
+        if self.model.update_user(uid, {'status': new_status}):
+            self.view.show_message("Success", f"User {action}d successfully.", "info")
+            self.refresh_data()
+        else:
+            self.view.show_message("Error", f"Failed to {action} user.", "critical")

@@ -1,14 +1,18 @@
-# ManageUsersView.py — Archive only, role locked on edit, Staff-only on add
+# view/ManageUsersView.py
+# MVC LAYER: VIEW
+# Responsibilities: render UI, expose signals, show dialogs.
+# Must NOT import models or write any business logic.
+
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QAbstractItemView, QFrame, QComboBox,
-                             QLineEdit, QDialog, QFormLayout, QSizePolicy)
+                             QLineEdit, QDialog, QFormLayout, QMessageBox,
+                             QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 
 PRIMARY = '#0076aa'
 WHITE   = '#ffffff'
-BG      = '#f4f6f8'
 TEXT    = '#1a1a1a'
 SUBTEXT = '#757575'
 DANGER  = '#D32F2F'
@@ -22,7 +26,7 @@ class ManageUsersView(QWidget):
     add_user_clicked     = pyqtSignal()
     edit_user_clicked    = pyqtSignal(int)
     archive_user_clicked = pyqtSignal(int)
-    delete_user_clicked  = pyqtSignal(int)   # kept for compat but unused
+    delete_user_clicked  = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -47,7 +51,8 @@ class ManageUsersView(QWidget):
 
         ctrl = QHBoxLayout()
         ctrl.setSpacing(8)
-        input_style = f"padding: 5px 10px; border: 1px solid {BORDER}; border-radius: 6px; color: {TEXT}; background: {WHITE}; font-size: 12px;"
+        input_style = (f"padding: 5px 10px; border: 1px solid {BORDER}; border-radius: 6px;"
+                       f" color: {TEXT}; background: {WHITE}; font-size: 12px;")
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search...")
@@ -72,7 +77,10 @@ class ManageUsersView(QWidget):
         self.btn_add = QPushButton("+ Add New User")
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setFixedHeight(32)
-        self.btn_add.setStyleSheet(f"QPushButton {{ background-color: {PRIMARY}; color: white; font-weight: bold; border-radius: 6px; padding: 4px 14px; font-size: 12px; border: none; }} QPushButton:hover {{ background-color: #005f8a; }}")
+        self.btn_add.setStyleSheet(
+            f"QPushButton {{ background-color: {PRIMARY}; color: white; font-weight: bold;"
+            f" border-radius: 6px; padding: 4px 14px; font-size: 12px; border: none; }}"
+            f" QPushButton:hover {{ background-color: #005f8a; }}")
         self.btn_add.clicked.connect(self.add_user_clicked.emit)
         ctrl.addWidget(self.btn_add)
         cl.addLayout(ctrl)
@@ -92,8 +100,10 @@ class ManageUsersView(QWidget):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet(f"""
-            QTableWidget {{ border: none; background-color: {WHITE}; color: {TEXT}; font-size: 13px; outline: 0; }}
-            QHeaderView::section {{ background-color: {TEXT}; color: white; padding: 10px 8px; font-weight: bold; border: none; font-size: 12px; }}
+            QTableWidget {{ border: none; background-color: {WHITE}; color: {TEXT};
+                            font-size: 13px; outline: 0; }}
+            QHeaderView::section {{ background-color: {TEXT}; color: white; padding: 10px 8px;
+                                    font-weight: bold; border: none; font-size: 12px; }}
             QTableWidget::item {{ padding: 9px 8px; border-bottom: 1px solid #f0f0f0; }}
             QTableWidget::item:selected {{ background-color: {WHITE}; color: {TEXT}; }}
             QTableWidget::item:alternate {{ background-color: #fafafa; }}
@@ -101,7 +111,7 @@ class ManageUsersView(QWidget):
         cl.addWidget(self.table)
         root.addWidget(card)
 
-    def load_data(self, users):
+    def load_data(self, users: list):
         self.table.clearContents()
         self.table.setRowCount(len(users))
         for row_idx, user in enumerate(users):
@@ -111,7 +121,6 @@ class ManageUsersView(QWidget):
             self.table.setItem(row_idx, 1, self._item(full_name))
             self.table.setItem(row_idx, 2, self._item(user['username']))
             self.table.setItem(row_idx, 3, self._item(user['role'], center=True))
-
             status_item = self._item(user['status'], center=True)
             status_item.setForeground(QColor(SUCCESS if user['status'] == 'Active' else DANGER))
             self.table.setItem(row_idx, 4, status_item)
@@ -125,22 +134,74 @@ class ManageUsersView(QWidget):
             btn_edit = QPushButton("Edit")
             btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_edit.setFixedSize(70, 32)
-            btn_edit.setStyleSheet(f"QPushButton {{ background-color: {PRIMARY}; color: white; border-radius: 6px; font-weight: bold; font-size: 12px; border: none; }} QPushButton:hover {{ background-color: #005f8a; }}")
-            btn_edit.clicked.connect(lambda checked, u=user['user_id']: self.edit_user_clicked.emit(u))
+            btn_edit.setStyleSheet(
+                f"QPushButton {{ background-color: {PRIMARY}; color: white; border-radius: 6px;"
+                f" font-weight: bold; font-size: 12px; border: none; }}"
+                f" QPushButton:hover {{ background-color: #005f8a; }}")
+            btn_edit.clicked.connect(
+                lambda checked, u=user['user_id']: self.edit_user_clicked.emit(u))
 
             is_active = user['status'] == 'Active'
+            arc_color = ARCHIVE if is_active else SUCCESS
+            arc_hover = '#c46000' if is_active else '#1e8449'
             btn_archive = QPushButton("Archive" if is_active else "Unarchive")
             btn_archive.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_archive.setFixedSize(90, 32)
-            arc_color = ARCHIVE if is_active else SUCCESS
-            btn_archive.setStyleSheet(f"QPushButton {{ background-color: {arc_color}; color: white; border-radius: 6px; font-weight: bold; font-size: 12px; border: none; }} QPushButton:hover {{ background-color: {'#c46000' if is_active else '#1e8449'}; }}")
-            btn_archive.clicked.connect(lambda checked, u=user['user_id']: self.archive_user_clicked.emit(u))
+            btn_archive.setStyleSheet(
+                f"QPushButton {{ background-color: {arc_color}; color: white; border-radius: 6px;"
+                f" font-weight: bold; font-size: 12px; border: none; }}"
+                f" QPushButton:hover {{ background-color: {arc_hover}; }}")
+            btn_archive.clicked.connect(
+                lambda checked, u=user['user_id']: self.archive_user_clicked.emit(u))
 
             h.addWidget(btn_edit)
             h.addWidget(btn_archive)
             self.table.setCellWidget(row_idx, 5, container)
 
-    def _item(self, text, center=False):
+    # ── View-owned dialogs ────────────────────────────────────────────────────
+
+    def show_message(self, title: str, text: str, icon_type: str = "info"):
+        """Styled feedback dialog. Controllers call this — never QMessageBox directly."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        icon_map = {
+            "info":     QMessageBox.Icon.Information,
+            "warning":  QMessageBox.Icon.Warning,
+            "critical": QMessageBox.Icon.Critical,
+        }
+        msg.setIcon(icon_map.get(icon_type.lower(), QMessageBox.Icon.NoIcon))
+        msg.setStyleSheet(f"""
+            QMessageBox {{ background-color: {WHITE}; }}
+            QMessageBox QLabel {{ color: {TEXT}; font-size: 12px; font-family: Segoe UI; }}
+            QMessageBox QPushButton {{
+                background-color: {PRIMARY}; color: white;
+                padding: 5px 15px; border-radius: 4px; min-width: 70px; border: none;
+            }}
+            QMessageBox QPushButton:hover {{ background-color: #005580; }}
+        """)
+        msg.exec()
+
+    def confirm_action(self, title: str, message: str) -> bool:
+        """Yes/No confirmation dialog. Returns True when user clicks Yes."""
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setStandardButtons(
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msg.setStyleSheet(f"""
+            QMessageBox {{ background-color: {WHITE}; }}
+            QMessageBox QLabel {{ color: {TEXT}; font-size: 12px; font-family: Segoe UI; }}
+            QMessageBox QPushButton {{
+                background-color: {PRIMARY}; color: white;
+                padding: 5px 15px; border-radius: 4px; min-width: 70px; border: none;
+            }}
+            QMessageBox QPushButton:hover {{ background-color: #005580; }}
+        """)
+        return msg.exec() == QMessageBox.StandardButton.Yes
+
+    def _item(self, text: str, center: bool = False) -> QTableWidgetItem:
         item = QTableWidgetItem(str(text))
         item.setForeground(QColor(TEXT))
         item.setFlags(Qt.ItemFlag.ItemIsEnabled)
@@ -148,19 +209,19 @@ class ManageUsersView(QWidget):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         return item
 
-    def make_item(self, text, center=False): return self._item(text, center)
+    def make_item(self, text, center=False):
+        return self._item(text, center)
 
 
 class UserFormDialog(QDialog):
     """
-    Add mode  (user_data=None) : Role fixed to 'Staff' (label, not dropdown).
-    Edit mode (user_data=dict) : Role is read-only label — cannot be changed.
+    Add mode  (user_data=None): Role fixed to 'Staff', shown as read-only label.
+    Edit mode (user_data=dict): Role is original value, still read-only.
     """
     def __init__(self, parent=None, user_data=None):
         super().__init__(parent)
-        self._is_edit = user_data is not None
+        self._is_edit    = user_data is not None
         self._role_value = user_data.get('role', 'Staff') if user_data else 'Staff'
-
         self.setWindowTitle("User Details")
         self.setFixedSize(420, 490)
         self.setStyleSheet(f"""
@@ -193,23 +254,23 @@ class UserFormDialog(QDialog):
         self.user_edit  = QLineEdit()
         self.pass_edit  = QLineEdit()
         self.pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pass_edit.setPlaceholderText("Leave blank to keep current" if self._is_edit else "")
+        self.pass_edit.setPlaceholderText(
+            "Leave blank to keep current" if self._is_edit else "")
 
         form.addRow("First Name:", self.fname_edit)
         form.addRow("Last Name:",  self.lname_edit)
         form.addRow("Username:",   self.user_edit)
         form.addRow("Password:",   self.pass_edit)
 
-        # Role: always a read-only label (Staff locked on add, original role on edit)
-        role_display_text = self._role_value  # "Staff" on add; actual role on edit
-        role_lbl = QLabel(role_display_text)
+        role_lbl = QLabel(self._role_value)
         role_lbl.setStyleSheet(f"""
             padding: 7px 10px; border: 1px solid {BORDER};
             border-radius: 6px; color: {SUBTEXT}; background-color: #f9f9f9;
             font-size: 12px; font-weight: normal;
         """)
-        tooltip = "Role cannot be changed after account creation." if self._is_edit else "Only Staff accounts can be added."
-        role_lbl.setToolTip(tooltip)
+        role_lbl.setToolTip(
+            "Role cannot be changed after account creation."
+            if self._is_edit else "Only Staff accounts can be added.")
         form.addRow("Role:", role_lbl)
 
         self.status_combo = QComboBox()
@@ -227,29 +288,32 @@ class UserFormDialog(QDialog):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(10)
-
         cancel = QPushButton("Cancel")
         cancel.setFixedHeight(38)
         cancel.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel.setStyleSheet("background-color: #ccc; color: #333; border-radius: 6px; font-weight: bold; border: none;")
+        cancel.setStyleSheet(
+            "background-color: #ccc; color: #333; border-radius: 6px;"
+            " font-weight: bold; border: none;")
         cancel.clicked.connect(self.reject)
 
         save = QPushButton("Save User")
         save.setFixedHeight(38)
         save.setCursor(Qt.CursorShape.PointingHandCursor)
-        save.setStyleSheet(f"background-color: {PRIMARY}; color: white; border-radius: 6px; font-weight: bold; border: none;")
+        save.setStyleSheet(
+            f"background-color: {PRIMARY}; color: white; border-radius: 6px;"
+            f" font-weight: bold; border: none;")
         save.clicked.connect(self.accept)
 
         btn_row.addWidget(cancel)
         btn_row.addWidget(save)
         layout.addLayout(btn_row)
 
-    def get_data(self):
+    def get_data(self) -> dict:
         return {
             'userFname': self.fname_edit.text().strip(),
             'userLname': self.lname_edit.text().strip(),
             'username':  self.user_edit.text().strip(),
             'password':  self.pass_edit.text(),
             'role':      self._role_value,
-            'status':    self.status_combo.currentText()
+            'status':    self.status_combo.currentText(),
         }

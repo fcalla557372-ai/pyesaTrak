@@ -159,9 +159,27 @@ class ProductDetailsView(QWidget):
             }}
             QComboBox:focus {{ border-color: {PRIMARY}; }}
             QComboBox QAbstractItemView {{
-                background: {WHITE}; color: {TEXT};
-                selection-background-color: #d0eaf8;
+                background-color: {WHITE};
+                color: {TEXT};
+                selection-background-color: {PRIMARY};
+                selection-color: {WHITE};
                 border: 1px solid {BORDER};
+                outline: 0;
+                padding: 4px;
+            }}
+            QComboBox QAbstractItemView::item {{
+                min-height: 28px;
+                padding: 4px 8px;
+                color: {TEXT};
+                background-color: {WHITE};
+            }}
+            QComboBox QAbstractItemView::item:hover {{
+                background-color: #e6f2f8;
+                color: {TEXT};
+            }}
+            QComboBox QAbstractItemView::item:selected {{
+                background-color: {PRIMARY};
+                color: {WHITE};
             }}
         """
         _lbl_style = f"color: {TEXT}; font-weight: bold; font-size: 13px; border: none;"
@@ -488,6 +506,32 @@ class ProductDetailsView(QWidget):
                     return None
         return None
 
+    def show_message(self, title: str, text: str, icon_type: str = "info"):
+        """
+        View-owned feedback dialog. Controllers call this — never QMessageBox directly.
+        icon_type: 'info' | 'warning' | 'critical'
+        """
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        icon_map = {
+            "info":     QMessageBox.Icon.Information,
+            "warning":  QMessageBox.Icon.Warning,
+            "critical": QMessageBox.Icon.Critical,
+        }
+        msg.setIcon(icon_map.get(icon_type.lower(), QMessageBox.Icon.NoIcon))
+        msg.setStyleSheet(f"""
+            QMessageBox {{ background-color: {WHITE}; }}
+            QMessageBox QLabel {{ color: {TEXT}; font-size: 12px; font-family: Segoe UI; }}
+            QMessageBox QPushButton {{
+                background-color: {PRIMARY}; color: white;
+                padding: 5px 15px; border-radius: 4px; min-width: 70px; border: none;
+            }}
+            QMessageBox QPushButton:hover {{ background-color: #005580; }}
+        """)
+        msg.exec()
+
 
 # ── ADD PRODUCT DIALOG ────────────────────────────────────────────────────────
 # Uses QWidget (NOT QDialog) to avoid 0xC0000409 heap corruption with Matplotlib.
@@ -517,10 +561,43 @@ class AddProductDialog(QWidget):
             QComboBox QAbstractItemView {{
                 background-color: {WHITE};
                 color: {TEXT};
-                selection-background-color: #d0eaf8;
-                selection-color: {TEXT};
+                selection-background-color: {PRIMARY};
+                selection-color: {WHITE};
                 border: 1px solid {BORDER};
-                outline: none;
+                outline: 0;
+                padding: 4px;
+            }}
+            QComboBox QAbstractItemView::item {{
+                min-height: 28px;
+                padding: 4px 8px;
+                color: {TEXT};
+                background-color: {WHITE};
+            }}
+            QComboBox QAbstractItemView::item:hover {{
+                background-color: #e6f2f8;
+                color: {TEXT};
+            }}
+            QComboBox QAbstractItemView::item:selected {{
+                background-color: {PRIMARY};
+                color: {WHITE};
+            }}
+            QComboBox QAbstractItemView QScrollBar:vertical {{
+                background-color: #f0f0f0;
+                width: 10px;
+                border: none;
+                border-radius: 5px;
+            }}
+            QComboBox QAbstractItemView QScrollBar::handle:vertical {{
+                background-color: #b0b0b0;
+                border-radius: 5px;
+                min-height: 20px;
+            }}
+            QComboBox QAbstractItemView QScrollBar::handle:vertical:hover {{
+                background-color: {PRIMARY};
+            }}
+            QComboBox QAbstractItemView QScrollBar::add-line:vertical,
+            QComboBox QAbstractItemView QScrollBar::sub-line:vertical {{
+                height: 0px;
             }}
         """)
         self._init_ui()

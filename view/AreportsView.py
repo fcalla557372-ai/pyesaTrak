@@ -245,6 +245,32 @@ class ReportsView(QWidget):
         """No-op — analytics is handled by the dedicated Analytics tab."""
         pass
 
+    def show_message(self, title: str, text: str, icon_type: str = "Info"):
+        """
+        View-owned feedback dialog. AreportController calls this — never QMessageBox directly.
+        icon_type: 'Info' | 'Warning' | 'Critical'
+        """
+        from PyQt6.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(text)
+        icon_map = {
+            "Info":     QMessageBox.Icon.Information,
+            "Warning":  QMessageBox.Icon.Warning,
+            "Critical": QMessageBox.Icon.Critical,
+        }
+        msg.setIcon(icon_map.get(icon_type, QMessageBox.Icon.NoIcon))
+        msg.setStyleSheet(f"""
+            QMessageBox {{ background-color: {WHITE}; }}
+            QMessageBox QLabel {{ color: {TEXT}; font-size: 12px; font-family: Segoe UI; }}
+            QMessageBox QPushButton {{
+                background-color: {PRIMARY}; color: white;
+                padding: 5px 15px; border-radius: 4px; min-width: 70px; border: none;
+            }}
+            QMessageBox QPushButton:hover {{ background-color: #005580; }}
+        """)
+        msg.exec()
+
 
 # ── REPORT DETAIL WINDOW ──────────────────────────────────────────────────────
 class ReportDetailDialog(QWidget):

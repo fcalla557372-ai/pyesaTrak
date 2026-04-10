@@ -1,21 +1,31 @@
-# Ainventory_Cont.py
+# controller/Ainventory_Cont.py
+# MVC LAYER: CONTROLLER
+# Responsibilities: receive user input signals, call Model methods,
+#                   pass results to View. No SQL, no Qt widget construction.
+
 from model.Ainventory_model import ProductDetailsModel
 from view.Ainventory_view import ProductDetailsView, AddProductDialog, ProductDetailDialog
-from PyQt6.QtWidgets import QMessageBox
-from typing import Optional
 
 
 class ProductDetailsController:
+    """
+    Coordinates between ProductDetailsModel and ProductDetailsView.
+    - Calls model for data and business-rule evaluation.
+    - Passes results (or error messages) to the view for display.
+    - Contains NO raw SQL, NO validation logic, NO Qt widget construction.
+    """
 
     def __init__(self, user_data=None):
-        self.model = ProductDetailsModel()
-        self.view  = ProductDetailsView()
+        self.model     = ProductDetailsModel()
+        self.view      = ProductDetailsView()
         self.user_data = user_data
         self._add_dialog    = None
         self._detail_dialog = None
         self._connect_signals()
         self.load_all_products()
         self._populate_filter_combos()
+
+    # ── Signal wiring ─────────────────────────────────────────────────────────
 
     def _connect_signals(self):
         self.view.add_product_clicked.connect(self.handle_add_product)
@@ -26,6 +36,8 @@ class ProductDetailsController:
         self.view.filter_defective_clicked.connect(self.load_defective)
         self.view.filter_by_brand_clicked.connect(self.load_by_brand)
         self.view.filter_by_category_clicked.connect(self.load_by_category)
+
+    # ── Navigation / filter handlers ──────────────────────────────────────────
 
     def load_all_products(self):
         self.view.display_products(self.model.get_all_products())
@@ -46,58 +58,93 @@ class ProductDetailsController:
             self.model.get_defective_products_with_reason())
         self.view.set_active_tab("Defect")
 
+    def load_by_brand(self, brand: str):
+        self.view.display_products(self.model.get_products_by_brand(brand))
+
+    def load_by_category(self, category: str):
+        self.view.display_products(self.model.get_products_by_category(category))
+
     def _populate_filter_combos(self):
         try:
             self.view.populate_brand_filter(self.model.get_unique_brands())
             self.view.populate_category_filter(self.model.get_unique_categories())
         except Exception as e:
-            print(f'[populate_filter_combos] {e}')
+            print(f"[_populate_filter_combos] {e}")
 
-    def load_by_brand(self, brand):
-        self.view.display_products(self.model.get_products_by_brand(brand))
-
-    def load_by_category(self, category):
-        self.view.display_products(self.model.get_products_by_category(category))
+    # ── Add product flow ──────────────────────────────────────────────────────
 
     def handle_add_product(self):
-        if self._add_dialog is not None and self._add_dialog.isVisible():
-            self._add_dialog.raise_()
-            self._add_dialog.activateWindow()
-            return
+        # Guard: if dialog is alive and visible, bring it to front.
+        # Wrapped in try/except because closing with the X button destroys
+        # the underlying Qt C++ object while self._add_dialog still holds
+        # the Python wrapper — calling .isVisible() on a dead object raises
+        # RuntimeError which cascades into a 0xC0000409 heap-corruption crash.
+        try:
+            if self._add_dialog is not None and self._add_dialog.isVisible():
+                self._add_dialog.raise_()
+                self._add_dialog.activateWindow()
+                return
+        except RuntimeError:
+            # Qt C++ object already deleted (user closed with X) — reset and proceed
+            self._add_dialog = None
+
         dialog = AddProductDialog(None)
+
+        # Suggest a category whenever the product name changes.
+        # derive_category() is a MODEL method — controller mediates the call.
         dialog.product_name_changed.connect(
-            lambda text: dialog.set_suggested_category(self._detect_category(text)))
+            lambda text: dialog.set_suggested_category(
+                self.model.derive_category(text)))
+
         dialog.confirmed.connect(self._process_add_product)
-        dialog.cancelled.connect(lambda: setattr(self, '_add_dialog', None))
-        dialog.confirmed.connect(lambda _: setattr(self, '_add_dialog', None))
+
+        # destroyed() fires for ALL close paths: Cancel button, Add Product button,
+        # AND the X (window close) button.
+        # AddProductDialog is a QWidget (not QDialog) so it has no finished() signal.
+        # WA_DeleteOnClose (set in AddProductDialog.__init__) ensures destroyed()
+        # is always emitted when the window is closed by any means.
+        dialog.destroyed.connect(lambda: setattr(self, '_add_dialog', None))
+
         self._add_dialog = dialog
         dialog.show()
 
-    def _process_add_product(self, data):
-        err = self._validate_product_data(data)
-        if err:
-            QMessageBox.warning(self.view, "Validation Error", err)
+    def _process_add_product(self, data: dict):
+        """
+        Validate via Model → on failure, tell View to show the error.
+        On success, call Model to persist, then refresh View.
+        """
+        # ── Validation lives in the Model, not here ───────────────────────────
+        error = self.model.validate_product_data(data)
+        if error:
+            self.view.show_message("Validation Error", error, "warning")
             return
+
         success = self.model.add_new_product(
-            product_name=data['product_name'],
-            brand=data['brand'],
-            model=data['model'],
-            description=data['description'],
-            stock_quantity=data['stock_quantity'],
-            status=self._determine_product_status(data['stock_quantity']),
-            user_id=self._get_current_user_id(),
-            category=data.get('category'),
+            product_name  = data['product_name'],
+            brand         = data['brand'],
+            model         = data['model'],
+            description   = data['description'],
+            stock_quantity= data['stock_quantity'],
+            user_id       = self._get_current_user_id(),
+            category      = data.get('category'),
         )
+
         if success:
-            QMessageBox.information(self.view, "Success",
-                f"Product '{data['product_name']}' added successfully!")
+            self.view.show_message(
+                "Success",
+                f"Product '{data['product_name']}' added successfully!",
+                "info")
             self.load_all_products()
             self._populate_filter_combos()
         else:
-            QMessageBox.critical(self.view, "Error",
-                "Failed to add product. Please try again.")
+            self.view.show_message(
+                "Error",
+                "Failed to add product. Please try again.",
+                "critical")
 
-    def handle_product_selected(self, product_id):
+    # ── Detail view ───────────────────────────────────────────────────────────
+
+    def handle_product_selected(self, product_id: int):
         if self.view._current_mode == "defect":
             return
         product = self.model.get_product_by_id(product_id)
@@ -105,38 +152,18 @@ class ProductDetailsController:
             self._detail_dialog = ProductDetailDialog(product, None)
             self._detail_dialog.show()
 
-    def _detect_category(self, text):
-        return self.model._derive_category(text)
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _validate_product_data(self, data):
-        if not data['product_name']:
-            return "Product Name is required."
-        if len(data['product_name']) < 3:
-            return "Product Name must be at least 3 characters."
-        if len(data['product_name']) > 255:
-            return "Product Name is too long (max 255 characters)."
-        if data['brand'] and len(data['brand']) > 100:
-            return "Brand name is too long (max 100 characters)."
-        if data['model'] and len(data['model']) > 100:
-            return "Model name is too long (max 100 characters)."
-        if data['stock_quantity'] < 0:
-            return "Stock quantity cannot be negative."
-        if data['stock_quantity'] > 10000:
-            return "Stock quantity too large (max 10,000)."
-        return None
-
-    def _determine_product_status(self, qty):
-        if qty == 0:  return 'Out of Stock'
-        if qty <= 10: return 'Low Stock'
-        return 'Available'
-
-    def _get_current_user_id(self):
+    def _get_current_user_id(self) -> int:
         if self.user_data and 'user_id' in self.user_data:
             return self.user_data['user_id']
         return 1
 
-    def show(self):    self.view.show()
-    def refresh(self): self.load_all_products()
-
     def set_user_data(self, user_data):
         self.user_data = user_data
+
+    def show(self):
+        self.view.show()
+
+    def refresh(self):
+        self.load_all_products()
