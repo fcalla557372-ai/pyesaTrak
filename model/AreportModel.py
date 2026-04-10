@@ -1,4 +1,4 @@
-# AreportModel.py - Updated with Analytics Data Methods
+
 import mysql.connector
 from mysql.connector import Error
 
@@ -22,18 +22,10 @@ class ReportsModel:
             print(f"Error connecting to DB: {e}")
             return None
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  ANALYTICS DATA METHODS (new)
-    # ─────────────────────────────────────────────────────────────────────────
+
 
     def get_analytics_kpis(self):
-        """
-        Returns dict with:
-            total_qty   - sum of all stock_quantity
-            low_count   - products with 0 < qty <= 10
-            out_count   - products with qty = 0
-            defect_pct  - (total defective units / total stock) * 100
-        """
+
         conn = self.connect()
         if not conn:
             return {'total_qty': 0, 'low_count': 0, 'out_count': 0, 'defect_pct': 0.0}
@@ -61,10 +53,7 @@ class ReportsModel:
             conn.close()
 
     def get_category_stock(self):
-        """
-        Groups inventory by inferred category using product name keywords.
-        Returns: { 'Processors (CPU)': 200, 'Graphics Cards (GPU)': 36, ... }
-        """
+
         conn = self.connect()
         if not conn:
             return {}
@@ -108,7 +97,7 @@ class ReportsModel:
             conn.close()
 
     def get_cpu_brand_stock(self):
-        """Brand breakdown for CPU products. Returns: { 'Intel': 176, 'AMD': 24 }"""
+
         conn = self.connect()
         if not conn:
             return {}
@@ -133,7 +122,7 @@ class ReportsModel:
             conn.close()
 
     def get_gpu_brand_stock(self):
-        """Brand breakdown for GPU products. Returns: { 'NVIDIA': 6, 'AMD': 24 }"""
+
         conn = self.connect()
         if not conn:
             return {}
@@ -158,7 +147,7 @@ class ReportsModel:
             conn.close()
 
     def get_critical_items(self, limit=10):
-        """Items that are out of stock or critically low (qty <= 5), with category label."""
+
         conn = self.connect()
         if not conn:
             return []

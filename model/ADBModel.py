@@ -1,20 +1,11 @@
-# model/ADBModel.py
-# MVC LAYER: MODEL
-# Responsibilities: DB queries for the Admin Dashboard KPIs and charts.
-# Must NOT import PyQt6 or contain any UI logic.
-#
-# CATEGORY_SQL is imported from Ainventory_model — single source of truth.
-# Any new product category keyword only needs to be added there.
-
 import mysql.connector
 from mysql.connector import Error
 
-# Single source of truth for category SQL expression
 from model.Ainventory_model import ProductDetailsModel
 
 
 class DashboardModel:
-    """Read-only model for Admin Dashboard aggregates."""
+
 
     def __init__(self):
         self._db_config = {
@@ -30,7 +21,7 @@ class DashboardModel:
         except Error:
             return None
 
-    # ── KPI counts ────────────────────────────────────────────────────────────
+    # KPI counts
 
     def get_total_products(self) -> int:
         conn = self._connect()
@@ -77,7 +68,7 @@ class DashboardModel:
         finally:
             conn.close()
 
-    # ── Stock flow ────────────────────────────────────────────────────────────
+    # Stock flow
 
     def get_stock_flow_summary(self) -> dict:
         """Total IN / OUT quantities for TODAY."""
@@ -121,7 +112,7 @@ class DashboardModel:
         finally:
             conn.close()
 
-    # ── Recent activity ───────────────────────────────────────────────────────
+    #Recent activity
 
     def get_recent_inventory_activities(self, limit: int = 10) -> list:
         conn = self._connect()
@@ -145,7 +136,7 @@ class DashboardModel:
         finally:
             conn.close()
 
-    # ── Category stock ────────────────────────────────────────────────────────
+    # Category stock
 
     def get_category_stock(self) -> dict:
         """

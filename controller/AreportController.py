@@ -1,7 +1,3 @@
-# controller/AreportController.py
-# MVC LAYER: CONTROLLER
-# Responsibilities: handle report generation/export actions, call Model,
-#                   pass results to View. No SQL, no widget construction.
 
 from model.AreportModel import ReportsModel
 from view.AreportsView import ReportDetailDialog, ReportExporter
@@ -19,7 +15,7 @@ class ReportsController:
         self.current_date_range  = {"start": "", "end": ""}
 
     def set_view(self, view):
-        """Injected view pattern (matches lazy-load in ADBoardController)."""
+
         self.view = view
         self.view.generate_btn.clicked.connect(self.handle_generate_report)
         self.view.export_btn.clicked.connect(self.handle_export_report)
@@ -117,11 +113,9 @@ class ReportsController:
     # ── DETAIL ROW ────────────────────────────────────────────────────────────
 
     def handle_report_row_clicked(self, report_id: int):
-        """Show detail dialog for a clicked report history row."""
+
         report = self.model.get_report_by_id(report_id)
         if report:
-            # Keep reference so dialog isn't garbage-collected.
-            # Use show() (non-blocking) to avoid nested event loop conflict
-            # with Matplotlib QtAgg backend on Windows (0xC0000409).
+
             self._detail_dialog = ReportDetailDialog(report, self.view)
             self._detail_dialog.show()

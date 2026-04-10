@@ -81,9 +81,9 @@ class ManageUsersModel:
                 data['role'],
                 data['status']
             ))
-            conn.commit()  # <--- CRITICAL: Saves to DB
+            conn.commit()
 
-            # Optional: Log this action to activity_log
+
             self.log_activity(cursor, data.get('performed_by_id', 1), f"Added user: {data['username']}")
             conn.commit()
 

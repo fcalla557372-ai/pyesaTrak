@@ -74,7 +74,7 @@ class LoginController:
             self.view.show()
 
     def _handle_staff_sign_out(self):
-        """Called when Staff clicks Sign Out and confirms. Re-opens the login window."""
+
         try:
             from view.login_view import LoginView
             from model.login_model import LoginModel

@@ -1,5 +1,3 @@
-# SIController.py — Staff Inventory Controller
-from model.SIModel import InventoryModel
 from view.SIView import InventoryView, StockInDialog, StockOutDialog, DefectDialog
 
 

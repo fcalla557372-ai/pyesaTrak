@@ -1,23 +1,12 @@
-# model/Ainventory_model.py
-# MVC LAYER: MODEL
-# Responsibilities: DB queries, CRUD, business rules, validation.
-# Must NOT import or reference any PyQt6 / UI widgets.
-
 import mysql.connector
 from mysql.connector import Error
 from typing import Optional
 
 
 class ProductDetailsModel:
-    """
-    All inventory business logic lives here.
-    Controllers call these methods; they never write SQL or validate data
-    themselves.
-    """
 
-    # ── Shared category SQL expression ───────────────────────────────────────
-    # Single source of truth — imported by ADBModel and AreportModel so the
-    # CASE WHEN block is never duplicated.
+
+
     CATEGORY_SQL = """
         CASE
             WHEN LOWER(product_name) LIKE '%processor%'
@@ -159,7 +148,7 @@ class ProductDetailsModel:
             print(f"[ProductDetailsModel] DB connection error: {e}")
         return None
 
-    # ── READ ──────────────────────────────────────────────────────────────────
+    # ── READ
 
     def get_all_products(self) -> list:
         return self.get_products_by_filter("1=1")
@@ -310,8 +299,7 @@ class ProductDetailsModel:
         finally:
             conn.close()
 
-    # ── CREATE ────────────────────────────────────────────────────────────────
-
+    # ── CREATE
     def add_new_product(self, product_name: str, brand: str, model: str,
                         description: str, stock_quantity: int,
                         user_id: int = 1, category: str = None) -> bool:
@@ -360,7 +348,7 @@ class ProductDetailsModel:
         finally:
             conn.close()
 
-    # ── UPDATE ────────────────────────────────────────────────────────────────
+    #  UPDATE
 
     def update_stock(self, product_id: int, quantity_change: int,
                      transaction_type: str, remarks: str, user_id: int,

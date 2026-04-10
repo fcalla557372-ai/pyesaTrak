@@ -1,7 +1,3 @@
-# controller/ADBoardController.py
-# MVC LAYER: CONTROLLER
-# Responsibilities: navigation flow, data orchestration, sign-out logic.
-# No Qt widget construction, no QDialog subclasses, no QMessageBox here.
 
 from model.ADBModel import DashboardModel
 from controller.ManageUsersController import ManageUsersController
@@ -14,7 +10,6 @@ from PyQt6.QtCore import QTimer
 
 
 class DashboardController:
-    # Page index constants — kept in sync with _build_stacked_pages()
     PAGE_DASHBOARD = 0
     PAGE_USERS     = 1
     PAGE_INVENTORY = 2
@@ -32,7 +27,6 @@ class DashboardController:
         self.product_controller = ProductDetailsController(self.user_data)
 
         # Reports page uses a lightweight placeholder swapped on first visit
-        # to prevent 0xC0000409 heap corruption (Matplotlib + QDateEdit on Windows)
         self._report_placeholder = QWidget()
         self.reports_controller  = None
 
@@ -115,7 +109,6 @@ class DashboardController:
 
     def handle_reports(self):
         if self.reports_controller is None:
-            # First visit — safe to create ReportsView (window already shown)
             report_view = ReportsView()
             self.reports_controller = ReportsController(self.user_data)
             self.reports_controller.set_view(report_view)
@@ -145,7 +138,6 @@ class DashboardController:
     # ── Activity detail ───────────────────────────────────────────────────────
 
     def show_activity_details(self, row_index: int):
-        """Controller fetches the activity dict; View renders the dialog."""
         if row_index < 0 or row_index >= len(self.recent_activities_data):
             return
         activity = self.recent_activities_data[row_index]

@@ -1,19 +1,10 @@
-# controller/ManageUsersController.py
-# MVC LAYER: CONTROLLER
-# Responsibilities: handle user actions, call Model, instruct View.
-# Must NOT import PyQt6 widgets directly or call QMessageBox.
 
-from model.ManageUsersModel import ManageUsersModel          # ← fixed package import
-from view.ManageUsersView import ManageUsersView, UserFormDialog  # ← fixed package import
+from model.ManageUsersModel import ManageUsersModel
+from view.ManageUsersView import ManageUsersView, UserFormDialog
 
 
 class ManageUsersController:
-    """
-    Mediates between ManageUsersModel and ManageUsersView.
-    - Calls model CRUD methods in response to view signals.
-    - Passes data or status messages to the view for display.
-    - No raw SQL, no PyQt widget construction, no QMessageBox here.
-    """
+
 
     def __init__(self, user_data=None):
         self.model     = ManageUsersModel()

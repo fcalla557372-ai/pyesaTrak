@@ -4,7 +4,7 @@ from mysql.connector import Error
 
 
 class LoginModel:
-    """Model for handling login logic"""
+
 
     def __init__(self):
         self.username = ""
@@ -13,7 +13,6 @@ class LoginModel:
         self.connection = None
 
     def connect_to_database(self):
-        """Establish connection to MySQL database"""
         try:
             self.connection = mysql.connector.connect(
                 host='127.0.0.1',
@@ -28,10 +27,7 @@ class LoginModel:
         return False, "Unable to connect to database"
 
     def validate_credentials(self, username, password):
-        """
-        Validate user credentials against database with plain text password
-        Returns: (bool, str, dict) - (is_valid, message, user_data)
-        """
+
         if not username or not password:
             return False, "Please enter both username and password", None
 
@@ -85,7 +81,6 @@ class LoginModel:
                         self.connection.commit()
                     except Error as log_error:
                         print(f"Warning: Failed to log login: {log_error}")
-                        # Don't fail login if logging fails
 
                     return True, f"Welcome, {full_name}!", user
                 else:

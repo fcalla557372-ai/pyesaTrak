@@ -1,19 +1,9 @@
-# controller/Ainventory_Cont.py
-# MVC LAYER: CONTROLLER
-# Responsibilities: receive user input signals, call Model methods,
-#                   pass results to View. No SQL, no Qt widget construction.
-
 from model.Ainventory_model import ProductDetailsModel
 from view.Ainventory_view import ProductDetailsView, AddProductDialog, ProductDetailDialog
 
 
 class ProductDetailsController:
-    """
-    Coordinates between ProductDetailsModel and ProductDetailsView.
-    - Calls model for data and business-rule evaluation.
-    - Passes results (or error messages) to the view for display.
-    - Contains NO raw SQL, NO validation logic, NO Qt widget construction.
-    """
+
 
     def __init__(self, user_data=None):
         self.model     = ProductDetailsModel()
